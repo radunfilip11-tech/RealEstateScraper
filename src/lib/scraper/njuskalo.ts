@@ -172,6 +172,8 @@ function parseListingsFromHTML(
         image_url: imageUrl,
         source: "njuskalo",
         description,
+        status: "Novi",
+        hidden: false,
       });
     } catch (e) {
       console.error("[Scraper] Error parsing listing:", e);

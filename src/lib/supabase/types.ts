@@ -16,6 +16,8 @@ export interface Listing {
   source: string;
   description: string | null;
   notified: boolean;
+  status: string;
+  hidden: boolean;
   created_at: string;
 }
 
@@ -59,7 +61,10 @@ export const SOURCES = ["njuskalo"] as const;
 
 export const TRANSACTION_TYPES = ["Prodaja", "Najam"] as const;
 
+export const LISTING_STATUSES = ["Novi", "Obnovljen", "Istekao"] as const;
+
 export type PropertyType = (typeof PROPERTY_TYPES)[number];
 export type AdvertiserType = (typeof ADVERTISER_TYPES)[number];
 export type Source = (typeof SOURCES)[number];
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
+export type ListingStatus = (typeof LISTING_STATUSES)[number];

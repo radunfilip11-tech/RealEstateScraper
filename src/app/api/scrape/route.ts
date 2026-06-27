@@ -33,26 +33,44 @@ export async function POST() {
       delayMs: 2000,
     });
 
-    // Get existing external IDs for deduplication
+    // Get existing external IDs and their created_at times for deduplication & renewal tracking
     const { data: existingListings } = await supabase
       .from("listings")
-      .select("external_id");
+      .select("external_id, created_at");
 
-    const existingIds = new Set(
-      (existingListings || []).map((l: { external_id: string }) => l.external_id)
+    const existingMap = new Map<string, number>(
+      (existingListings || []).map((l: { external_id: string; created_at: string }) => [
+        l.external_id,
+        new Date(l.created_at).getTime(),
+      ])
     );
 
-    // Filter to only new listings
-    const newListings = listings.filter(
-      (l) => !existingIds.has(l.external_id)
-    );
+    const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+    const now = Date.now();
 
-    // Upsert new listings in batches (ignore duplicates via external_id)
+    const trueNewListings = [];
+    const renewedListings = [];
+
+    for (const l of listings) {
+      if (!existingMap.has(l.external_id)) {
+        l.status = "Novi";
+        trueNewListings.push(l);
+      } else {
+        const createdAt = existingMap.get(l.external_id) || now;
+        if (now - createdAt > TWELVE_HOURS) {
+          // If the listing is older than 12 hours and we found it on page 1, it was bumped!
+          renewedListings.push(l.external_id);
+        }
+      }
+    }
+
+    // Upsert true new listings
     let insertedCount = 0;
+    let renewedCount = 0;
     const batchSize = 50;
 
-    for (let i = 0; i < newListings.length; i += batchSize) {
-      const batch = newListings.slice(i, i + batchSize);
+    for (let i = 0; i < trueNewListings.length; i += batchSize) {
+      const batch = trueNewListings.slice(i, i + batchSize);
       const { error: insertError, data: insertedData } = await supabase
         .from("listings")
         .upsert(batch, { onConflict: "external_id", ignoreDuplicates: true })
@@ -65,14 +83,33 @@ export async function POST() {
       }
     }
 
+    // Update renewed listings
+    if (renewedListings.length > 0) {
+      const { error: updateError } = await supabase
+        .from("listings")
+        .update({
+          status: "Obnovljen",
+          created_at: new Date().toISOString(),
+          notified: false // So it triggers a new notification
+        })
+        .in("external_id", renewedListings);
+        
+      if (updateError) {
+        console.error("Update error for renewed:", updateError);
+      } else {
+        renewedCount = renewedListings.length;
+      }
+    }
+
     // Update scrape run with results
     await supabase
       .from("scrape_runs")
       .update({
-        status: "success",
+        status: "completed",
         finished_at: new Date().toISOString(),
         listings_found: listings.length,
         new_listings: insertedCount,
+        error_log: renewedCount > 0 ? `Obnovljeno: ${renewedCount}` : null,
       })
       .eq("id", scrapeRun.id);
 
@@ -80,6 +117,7 @@ export async function POST() {
       success: true,
       listings_found: listings.length,
       new_listings: insertedCount,
+      renewed_listings: renewedCount,
       scrape_run_id: scrapeRun.id,
     });
   } catch (error) {

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Listing } from "@/lib/supabase/types";
-import { PROPERTY_TYPES, ADVERTISER_TYPES, SOURCES, TRANSACTION_TYPES } from "@/lib/supabase/types";
+import { PROPERTY_TYPES, ADVERTISER_TYPES, SOURCES, TRANSACTION_TYPES, LISTING_STATUSES } from "@/lib/supabase/types";
 import StatsBar from "@/components/ui/StatsBar";
 import SearchBar from "@/components/ui/SearchBar";
 import FilterDropdown from "@/components/ui/FilterDropdown";
@@ -19,10 +19,13 @@ export default function Dashboard() {
 
   // Filter state
   const [search, setSearch] = useState("");
+  const [locationSearch, setLocationSearch] = useState("");
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [selectedPropertyTypes, setSelectedPropertyTypes] = useState<string[]>([]);
   const [selectedTransactionTypes, setSelectedTransactionTypes] = useState<string[]>([]);
   const [selectedAdvertiserTypes, setSelectedAdvertiserTypes] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [showHidden, setShowHidden] = useState(false);
   const [priceMin, setPriceMin] = useState<number | null>(null);
   const [priceMax, setPriceMax] = useState<number | null>(null);
   const [sizeMin, setSizeMin] = useState<number | null>(null);
@@ -56,11 +59,20 @@ export default function Dashboard() {
       if (selectedPropertyTypes.length > 0) {
         query = query.in("property_type", selectedPropertyTypes);
       }
+      if (locationSearch) {
+        query = query.ilike("location", `%${locationSearch}%`);
+      }
       if (selectedTransactionTypes.length > 0) {
         query = query.in("transaction_type", selectedTransactionTypes);
       }
       if (selectedAdvertiserTypes.length > 0) {
         query = query.in("advertiser_type", selectedAdvertiserTypes);
+      }
+      if (selectedStatuses.length > 0) {
+        query = query.in("status", selectedStatuses);
+      }
+      if (!showHidden) {
+        query = query.eq("hidden", false);
       }
 
       // Apply range filters
@@ -91,10 +103,13 @@ export default function Dashboard() {
     }
   }, [
     search,
+    locationSearch,
     selectedSources,
     selectedPropertyTypes,
     selectedTransactionTypes,
     selectedAdvertiserTypes,
+    selectedStatuses,
+    showHidden,
     priceMin,
     priceMax,
     sizeMin,
@@ -160,6 +175,27 @@ export default function Dashboard() {
     setSizeMin(null);
     setSizeMax(null);
     setSort("newest");
+  };
+
+  // Handle hide listing
+  const handleHideListing = async (id: string) => {
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { error } = await supabase
+        .from("listings")
+        .update({ hidden: true })
+        .eq("id", id);
+        
+      if (!error) {
+        if (!showHidden) {
+          setListings((prev) => prev.filter((l) => l.id !== id));
+        } else {
+          setListings((prev) => prev.map((l) => l.id === id ? { ...l, hidden: true } : l));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to hide listing:", e);
+    }
   };
 
   return (
@@ -251,6 +287,20 @@ export default function Dashboard() {
         id="filters-bar"
         className="flex items-center gap-2 flex-wrap mb-6"
       >
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Lokacija..."
+            value={locationSearch}
+            onChange={(e) => setLocationSearch(e.target.value)}
+            className="inline-flex items-center gap-2 pl-9 pr-3.5 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 bg-white placeholder:text-gray-500 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 w-40 transition-colors"
+          />
+          <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </div>
+
         <FilterDropdown
           label="Transakcija"
           icon={
@@ -277,6 +327,18 @@ export default function Dashboard() {
           onChange={setSelectedAdvertiserTypes}
         />
         <FilterDropdown
+          id="status"
+          label="Status"
+          icon={
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143z" />
+            </svg>
+          }
+          options={[...LISTING_STATUSES]}
+          selected={selectedStatuses}
+          onChange={setSelectedStatuses}
+        />
+        <FilterDropdown
           id="property-type"
           label="Tip nekretnine"
           options={[...PROPERTY_TYPES]}
@@ -301,6 +363,18 @@ export default function Dashboard() {
           onMinChange={setSizeMin}
           onMaxChange={setSizeMax}
         />
+        
+        <div className="flex items-center gap-2 ml-auto">
+          <label className="text-sm text-gray-600 flex items-center gap-2 cursor-pointer">
+            <input 
+              type="checkbox" 
+              className="w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
+              checked={showHidden}
+              onChange={(e) => setShowHidden(e.target.checked)}
+            />
+            Prikaži skrivene oglase
+          </label>
+        </div>
         
         <div className="flex-1"></div>
         <div className="flex items-center gap-2">
@@ -396,7 +470,7 @@ export default function Dashboard() {
               Prikazano {listings.length} oglasa
             </p>
             {listings.map((listing) => (
-              <ListingCard key={listing.id} listing={listing} />
+              <ListingCard key={listing.id} listing={listing} onHide={() => handleHideListing(listing.id)} />
             ))}
           </div>
         )}

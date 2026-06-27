@@ -1,5 +1,16 @@
 # Development Log
 
+## [2026-06-27] Smart Renewal Tracking & Filters UI Update
+- **Goal**: Add UI filtering by rent vs sale, location, price, and status (new, renewed, expired), alongside robust scraper fixes for prices and category bans.
+- **Tasks & Fixes**:
+  - **Transaction Type**: Added `transaction_type` to DB. Updated scraper to fetch `najam_stanova`, `najam_kuca`, etc.
+  - **Location Filter**: Replaced a potential 100+ item dropdown with a sleek text input for `Lokacija` that uses real-time `ilike` querying for flexibility.
+  - **Missing Prices Bug**: Fixed scraper returning `null` for prices. The HTML regex `<li>...</li>` stopped too early on nested lists. Replaced with `<article class="entity-body cf">...</article>`.
+  - **ShieldSquare Ban**: Heavy testing on `/prodaja-stanova` triggered a ban. Added a rotating `User-Agent` array to Playwright context to mimic different OS/Browsers.
+  - **Smart "Obnovljen" Tracking**: Instead of unreliable HTML badge parsing for "Novi/Obnovljen", implemented database-driven logic. If a listing is scraped on Page 1 but already exists in DB and is >12 hours old, it is marked as `Obnovljen` and bumped up in the UI (by resetting `created_at` and `notified` flag).
+  - **UI Hide System**: Added `hidden` boolean to DB. Added eye-slash button to `ListingCard` appearing on hover, allowing users to manually banish listings. Added "Prikaži skrivene" toggle switch in dashboard.
+
+---
 ## [2026-06-27] Playwright Scraper Upgrade
 - **Goal**: Fix scraper being blocked by Njuškalo's ShieldSquare bot protection.
 - **Investigation**:

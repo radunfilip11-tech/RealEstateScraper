@@ -3,17 +3,34 @@ import type { Listing } from "@/lib/supabase/types";
 
 interface ListingCardProps {
   listing: Listing;
+  onHide?: () => void;
 }
 
-export default function ListingCard({ listing }: ListingCardProps) {
+export default function ListingCard({ listing, onHide }: ListingCardProps) {
   return (
-    <a
-      href={listing.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      id={`listing-${listing.external_id}`}
-      className="group flex items-stretch bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg hover:border-gray-300 transition-all duration-200"
-    >
+    <div className={`group relative bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg hover:border-gray-300 transition-all duration-200 ${listing.hidden ? 'opacity-50 grayscale' : ''}`}>
+      {onHide && (
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onHide();
+          }}
+          title={listing.hidden ? "Oglas je sakriven" : "Sakrij oglas"}
+          className="absolute top-2 right-2 z-10 p-2 bg-white/90 backdrop-blur-sm rounded-full text-gray-400 hover:text-red-500 shadow-sm opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-white"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+          </svg>
+        </button>
+      )}
+      <a
+        href={listing.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        id={`listing-${listing.external_id}`}
+        className="flex items-stretch w-full"
+      >
       {/* Thumbnail */}
       <div className="relative w-[180px] min-h-[130px] bg-gray-100 flex-shrink-0 overflow-hidden">
         {listing.image_url ? (
@@ -102,6 +119,25 @@ export default function ListingCard({ listing }: ListingCardProps) {
           <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 flex-wrap">
             <Badge variant="source" value={listing.source} />
+            {listing.status && (
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${
+                listing.status === 'Novi' 
+                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}>
+                {listing.status === 'Novi' && (
+                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143z" />
+                  </svg>
+                )}
+                {listing.status === 'Obnovljen' && (
+                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                )}
+                {listing.status}
+              </span>
+            )}
             {listing.transaction_type && (
               <Badge variant="transaction" value={listing.transaction_type} />
             )}
@@ -126,8 +162,9 @@ export default function ListingCard({ listing }: ListingCardProps) {
             )}
           </div>
           </div>
+          </div>
         </div>
-      </div>
-    </a>
+      </a>
+    </div>
   );
 }
