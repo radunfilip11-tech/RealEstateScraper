@@ -10,6 +10,12 @@ export async function POST(request: Request) {
 
   let maxPages = 1;
   let countySlug: string | null = null;
+  const options: { maxPages: number; countySlug: string | null; categories?: string[], delayMs: number } = {
+    maxPages: 1,
+    countySlug: null,
+    delayMs: 2000,
+  };
+  
   try {
     const body = await request.json();
     if (body.pages && typeof body.pages === "number") {
@@ -17,6 +23,9 @@ export async function POST(request: Request) {
     }
     if (body.county && typeof body.county === "string") {
       countySlug = body.county;
+    }
+    if (body.categories && Array.isArray(body.categories)) {
+      options.categories = body.categories;
     }
   } catch (e) {
     // ignore
@@ -42,11 +51,10 @@ export async function POST(request: Request) {
 
   try {
     // Run the scraper
-    const listings = await scrapeNjuskalo({
-      maxPages: maxPages,
-      countySlug: countySlug,
-      delayMs: 2000,
-    });
+    options.maxPages = maxPages;
+    options.countySlug = countySlug;
+    
+    const listings = await scrapeNjuskalo(options);
 
     // Get existing external IDs and their created_at times for deduplication & renewal tracking
     const { data: existingListings } = await supabase
@@ -65,6 +73,7 @@ export async function POST(request: Request) {
 
     const trueNewListings = [];
     const renewedListings = [];
+    const existingToUpdate = [];
 
     for (const l of listings) {
       if (!existingMap.has(l.external_id)) {
@@ -73,9 +82,10 @@ export async function POST(request: Request) {
       } else {
         const createdAt = existingMap.get(l.external_id) || now;
         if (now - createdAt > TWELVE_HOURS) {
-          // If the listing is older than 12 hours and we found it on page 1, it was bumped!
           renewedListings.push(l.external_id);
         }
+        // Always push to existingToUpdate to backfill any missing data (price, location, etc.)
+        existingToUpdate.push(l);
       }
     }
 
@@ -98,7 +108,26 @@ export async function POST(request: Request) {
       }
     }
 
-    // Update renewed listings
+    // Update existing listings data (backfill missing price/location from SuperVau detail pages)
+    // We update them individually or in small batches to avoid overwriting status/hidden flags.
+    for (const l of existingToUpdate) {
+      await supabase
+        .from("listings")
+        .update({
+          price: l.price,
+          price_numeric: l.price_numeric,
+          location: l.location,
+          location_county: l.location_county,
+          location_city: l.location_city,
+          location_neighborhood: l.location_neighborhood,
+          size_m2: l.size_m2,
+          image_url: l.image_url,
+          title: l.title,
+        })
+        .eq("external_id", l.external_id);
+    }
+
+    // Update renewed listings (bump them)
     if (renewedListings.length > 0) {
       const { error: updateError } = await supabase
         .from("listings")

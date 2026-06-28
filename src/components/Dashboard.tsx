@@ -18,6 +18,7 @@ export default function Dashboard() {
   const [scrapeResult, setScrapeResult] = useState<string | null>(null);
   const [scrapePages, setScrapePages] = useState<number>(1);
   const [scrapeCounty, setScrapeCounty] = useState<string>("");
+  const [scrapeCategory, setScrapeCategory] = useState<string>("");
 
   // Filter state
   const [search, setSearch] = useState("");
@@ -168,7 +169,8 @@ export default function Dashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           pages: scrapePages,
-          county: scrapeCounty || undefined
+          county: scrapeCounty || undefined,
+          categories: scrapeCategory ? [scrapeCategory] : undefined
         }),
       });
       const data = await res.json();
@@ -283,6 +285,25 @@ export default function Dashboard() {
               <option value="osjecko-baranjska">Osječko-baranjska</option>
               <option value="varazdinska">Varaždinska</option>
             </optgroup>
+          </select>
+          <select
+            value={scrapeCategory}
+            onChange={(e) => setScrapeCategory(e.target.value)}
+            disabled={scraping}
+            className="text-sm bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors cursor-pointer w-44"
+            title="Kategorija za skrapanje"
+          >
+            <option value="">Sve kategorije (Sporo!)</option>
+            <option value="stanovi">Prodaja stanova</option>
+            <option value="kuce">Prodaja kuća</option>
+            <option value="zemljista">Zemljišta</option>
+            <option value="poslovni_prostori">Poslovni prostori</option>
+            <option value="vikendice">Vikendice</option>
+            <option value="garaze">Garaže</option>
+            <option value="novogradnja">Novogradnja</option>
+            <option value="najam_stanova">Najam stanova</option>
+            <option value="najam_kuca">Najam kuća</option>
+            <option value="najam_poslovnih_prostora">Najam poslovnih prostora</option>
           </select>
           <select
             value={scrapePages}

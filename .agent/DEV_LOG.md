@@ -1,5 +1,15 @@
 # Development Log
 
+## [2026-06-29] SuperVau Card Data Enrichment via Detail Page Scraping
+- **Problem**: Some listings appeared in the dashboard without price, location, or size data, even though those fields existed on Njuškalo's detail page.
+- **Root Cause**: Njuškalo uses 3 card types on search results pages:
+  - **VauVau** (standard promoted): Full card with `entity-prices`, `Lokacija:` label → parsed correctly.
+  - **SuperVau** (premium featured): Compact card with only a title, teaser `<p>` paragraph, and thumbnail. **No price div, no Lokacija label, no size** in the card HTML.
+  - **Latest** (sidebar ads): Non-real-estate items from other categories — correctly skipped by the `/nekretnine/` URL filter.
+- **Fix**: Added `parseDetailPageHTML()` function that extracts data from the structured detail page HTML (`ClassifiedDetailSummary-priceDomestic` for price, `ClassifiedDetailBasicDetails` for location/size). After parsing search results, the scraper visits detail pages for any listing missing price or location, filling in gaps with human-like delays between visits.
+- **Bonus**: Extracted `CITY_TO_COUNTY` mapping to module-level constant (was duplicated inline). Extended it with county self-mappings and additional Dalmatian coast cities for detail page 3-part location format (County, City, Neighborhood).
+
+---
 ## [2026-06-27] Smart Renewal Tracking & Filters UI Update
 - **Goal**: Add UI filtering by rent vs sale, location, price, and status (new, renewed, expired), alongside robust scraper fixes for prices and category bans.
 - **Tasks & Fixes**:

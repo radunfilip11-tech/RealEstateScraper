@@ -35,6 +35,138 @@ function stripHtml(s: string): string {
 }
 
 /**
+ * City-to-county mapping for resolving county from city name.
+ * Used by both search card parser and detail page parser.
+ */
+const CITY_TO_COUNTY: Record<string, string> = {
+  "Donji Grad": "Grad Zagreb", "Gornji Grad - Medveščak": "Grad Zagreb", "Trnje": "Grad Zagreb",
+  "Maksimir": "Grad Zagreb", "Peščenica - Žitnjak": "Grad Zagreb", "Novi Zagreb - Istok": "Grad Zagreb",
+  "Novi Zagreb - Zapad": "Grad Zagreb", "Trešnjevka - Sjever": "Grad Zagreb", "Trešnjevka - Jug": "Grad Zagreb",
+  "Črnomerec": "Grad Zagreb", "Gornja Dubrava": "Grad Zagreb", "Donja Dubrava": "Grad Zagreb",
+  "Stenjevec": "Grad Zagreb", "Podsused - Vrapče": "Grad Zagreb", "Podsljeme": "Grad Zagreb",
+  "Sesvete": "Grad Zagreb", "Brezovica": "Grad Zagreb", "Zaprešić": "Zagrebačka", "Zaprešić - Okolica": "Zagrebačka",
+  "Velika Gorica": "Zagrebačka", "Velika Gorica - Okolica": "Zagrebačka", "Samobor": "Zagrebačka",
+  "Samobor - Okolica": "Zagrebačka", "Sveta Nedelja": "Zagrebačka", "Dugo Selo": "Zagrebačka",
+  "Ivanić-Grad": "Zagrebačka", "Jastrebarsko": "Zagrebačka", "Sveti Ivan Zelina": "Zagrebačka",
+  "Vrbovec": "Zagrebačka", "Rijeka": "Primorsko-goranska", "Krk": "Primorsko-goranska",
+  "Dobrinj": "Primorsko-goranska", "Crikvenica": "Primorsko-goranska", "Malinska-Dubašnica": "Primorsko-goranska",
+  "Opatija": "Primorsko-goranska", "Kastav": "Primorsko-goranska", "Viškovo": "Primorsko-goranska",
+  "Baška": "Primorsko-goranska", "Omišalj": "Primorsko-goranska", "Punat": "Primorsko-goranska",
+  "Vrbnik": "Primorsko-goranska", "Novi Vinodolski": "Primorsko-goranska", "Pula": "Istarska", "Poreč": "Istarska",
+  "Rovinj": "Istarska", "Umag": "Istarska", "Vodnjan": "Istarska", "Medulin": "Istarska", "Labin": "Istarska",
+  "Pazin": "Istarska", "Novigrad": "Istarska", "Split": "Splitsko-dalmatinska", "Kaštela": "Splitsko-dalmatinska",
+  "Makarska": "Splitsko-dalmatinska", "Omiš": "Splitsko-dalmatinska", "Trogir": "Splitsko-dalmatinska",
+  "Solin": "Splitsko-dalmatinska", "Sinj": "Splitsko-dalmatinska", "Brač": "Splitsko-dalmatinska",
+  "Hvar": "Splitsko-dalmatinska", "Zadar": "Zadarska", "Biograd na Moru": "Zadarska", "Nin": "Zadarska",
+  "Pag": "Zadarska", "Vir": "Zadarska", "Šibenik": "Šibensko-kninska", "Šibenik - Okolica": "Šibensko-kninska",
+  "Vodice": "Šibensko-kninska", "Knin": "Šibensko-kninska", "Osijek": "Osječko-baranjska", "Đakovo": "Osječko-baranjska",
+  "Našice": "Osječko-baranjska", "Valpovo": "Osječko-baranjska", "Beli Manastir": "Osječko-baranjska",
+  "Belišće": "Osječko-baranjska", "Varaždin": "Varaždinska", "Karlovac": "Karlovačka", "Sisak": "Sisačko-moslavačka",
+  "Slavonski Brod": "Brodsko-posavska", "Dubrovnik": "Dubrovačko-neretvanska", "Vinkovci": "Vukovarsko-srijemska",
+  "Vukovar": "Vukovarsko-srijemska", "Koprivnica": "Koprivničko-križevačka", "Bjelovar": "Bjelovarsko-bilogorska",
+  "Čakovec": "Međimurska", "Požega": "Požeško-slavonska", "Virovitica": "Virovitičko-podravska", "Gospić": "Ličko-senjska",
+  "Otočac": "Ličko-senjska", "Novalja": "Ličko-senjska", "Krapina": "Krapinsko-zagorska",
+  // County names map to themselves (detail pages return county as the first part)
+  "Grad Zagreb": "Grad Zagreb", "Zagrebačka": "Zagrebačka", "Primorsko-goranska": "Primorsko-goranska",
+  "Istarska": "Istarska", "Splitsko-dalmatinska": "Splitsko-dalmatinska", "Zadarska": "Zadarska",
+  "Šibensko-kninska": "Šibensko-kninska", "Osječko-baranjska": "Osječko-baranjska", "Varaždinska": "Varaždinska",
+  "Karlovačka": "Karlovačka", "Sisačko-moslavačka": "Sisačko-moslavačka", "Brodsko-posavska": "Brodsko-posavska",
+  "Dubrovačko-neretvanska": "Dubrovačko-neretvanska", "Vukovarsko-srijemska": "Vukovarsko-srijemska",
+  "Koprivničko-križevačka": "Koprivničko-križevačka", "Bjelovarsko-bilogorska": "Bjelovarsko-bilogorska",
+  "Međimurska": "Međimurska", "Požeško-slavonska": "Požeško-slavonska", "Virovitičko-podravska": "Virovitičko-podravska",
+  "Ličko-senjska": "Ličko-senjska", "Krapinsko-zagorska": "Krapinsko-zagorska",
+  // Additional cities/areas that appear on detail pages
+  "Murter": "Šibensko-kninska", "Primošten": "Šibensko-kninska", "Rogoznica": "Šibensko-kninska",
+  "Trogir - Okolica": "Splitsko-dalmatinska", "Kaštela - Okolica": "Splitsko-dalmatinska",
+  "Marina": "Splitsko-dalmatinska", "Podstrana": "Splitsko-dalmatinska", "Stobreč": "Splitsko-dalmatinska",
+  "Supetar": "Splitsko-dalmatinska", "Bol": "Splitsko-dalmatinska", "Jelsa": "Splitsko-dalmatinska",
+  "Stari Grad": "Splitsko-dalmatinska", "Vis": "Splitsko-dalmatinska", "Komiža": "Splitsko-dalmatinska",
+  "Korčula": "Dubrovačko-neretvanska", "Orebić": "Dubrovačko-neretvanska", "Ploče": "Dubrovačko-neretvanska",
+  "Metković": "Dubrovačko-neretvanska", "Cavtat": "Dubrovačko-neretvanska",
+};
+
+/**
+ * Parse price, location, and size from a Njuškalo detail page HTML.
+ *
+ * Detail page structure (as of June 2026):
+ *   Price:    <dd class="ClassifiedDetailSummary-priceDomestic">195.000 €</dd>
+ *   Location: <dt>Lokacija</dt><dd>Splitsko-dalmatinska, Trogir - Okolica, Plano</dd>
+ *   Size:     <dt>Površina|Stambena površina</dt><dd>999,00 m²</dd>
+ *   (all inside ClassifiedDetailBasicDetails-list)
+ */
+function parseDetailPageHTML(html: string): {
+  price: string | null;
+  priceNumeric: number | null;
+  location: string | null;
+  locationCounty: string | null;
+  locationCity: string | null;
+  locationNeighborhood: string | null;
+  sizeM2: number | null;
+} {
+  let price: string | null = null;
+  let priceNumeric: number | null = null;
+  let location: string | null = null;
+  let locationCounty: string | null = null;
+  let locationCity: string | null = null;
+  let locationNeighborhood: string | null = null;
+  let sizeM2: number | null = null;
+
+  // --- Price ---
+  const priceMatch = html.match(
+    /ClassifiedDetailSummary-priceDomestic"[^>]*>([\s\S]*?)<\/dd>/i
+  );
+  if (priceMatch) {
+    price = stripHtml(priceMatch[1]);
+    const numStr = price
+      .replace(/[^\d.,]/g, "")
+      .replace(/\./g, "")
+      .replace(",", ".");
+    const parsed = parseFloat(numStr);
+    if (!isNaN(parsed)) priceNumeric = parsed;
+  }
+
+  // --- Location ---
+  // Pattern: <dt>...Lokacija...</dt><dd>...Splitsko-dalmatinska, City, Neighborhood...</dd>
+  const locMatch = html.match(
+    /Lokacija<\/span>[\s\S]*?ClassifiedDetailBasicDetails-listDefinition"[^>]*>[\s\S]*?textWrapContainer"[^>]*>([\s\S]*?)<\/span>/i
+  );
+  if (locMatch) {
+    location = stripHtml(locMatch[1]) || null;
+    if (location) {
+      // Detail pages return: "County, City, Neighborhood" (3 parts)
+      // or sometimes "City, Neighborhood" (2 parts)
+      const parts = location.split(",").map((s) => s.trim());
+      if (parts.length >= 3) {
+        // Full format: County, City, Neighborhood
+        locationCounty = CITY_TO_COUNTY[parts[0]] || parts[0] || null;
+        locationCity = parts[1] || null;
+        locationNeighborhood = parts[2] || null;
+      } else if (parts.length === 2) {
+        locationCity = parts[0] || null;
+        locationNeighborhood = parts[1] || null;
+        locationCounty = CITY_TO_COUNTY[parts[0]] || null;
+      } else if (parts.length === 1) {
+        locationCity = parts[0] || null;
+        locationCounty = CITY_TO_COUNTY[parts[0]] || null;
+      }
+    }
+  }
+
+  // --- Size ---
+  const sizeMatch = html.match(
+    /(?:površina|Površina)<\/span>[\s\S]*?textWrapContainer"[^>]*>([\s\S]*?)<\/span>/i
+  );
+  if (sizeMatch) {
+    const sizeText = stripHtml(sizeMatch[1]);
+    const sizeStr = sizeText.replace(/[^\d.,]/g, "").replace(/\./g, "").replace(",", ".");
+    const parsed = parseFloat(sizeStr);
+    if (!isNaN(parsed)) sizeM2 = parsed;
+  }
+
+  return { price, priceNumeric, location, locationCounty, locationCity, locationNeighborhood, sizeM2 };
+}
+
+/**
  * Parse listing items from Njuškalo search results HTML.
  *
  * Real HTML structure (as of June 2026):
@@ -50,6 +182,10 @@ function stripHtml(s: string): string {
  *       </div>
  *     </article>
  *   </li>
+ *
+ * Note: "SuperVau" (premium) cards use a different layout with only a teaser
+ * paragraph and NO price/location data. These are enriched by visiting the
+ * detail page after initial parsing (see enrichIncompleteListings).
  */
 function parseListingsFromHTML(
   html: string,
@@ -131,38 +267,8 @@ function parseListingsFromHTML(
           const parts = location.split(",").map((s) => s.trim());
           if (parts.length > 0) locationCity = parts[0] || null;
           if (parts.length > 1) locationNeighborhood = parts[1] || null;
-          
           if (locationCity) {
-            const cityToCounty: Record<string, string> = {
-              "Donji Grad": "Grad Zagreb", "Gornji Grad - Medveščak": "Grad Zagreb", "Trnje": "Grad Zagreb", 
-              "Maksimir": "Grad Zagreb", "Peščenica - Žitnjak": "Grad Zagreb", "Novi Zagreb - Istok": "Grad Zagreb", 
-              "Novi Zagreb - Zapad": "Grad Zagreb", "Trešnjevka - Sjever": "Grad Zagreb", "Trešnjevka - Jug": "Grad Zagreb", 
-              "Črnomerec": "Grad Zagreb", "Gornja Dubrava": "Grad Zagreb", "Donja Dubrava": "Grad Zagreb", 
-              "Stenjevec": "Grad Zagreb", "Podsused - Vrapče": "Grad Zagreb", "Podsljeme": "Grad Zagreb", 
-              "Sesvete": "Grad Zagreb", "Brezovica": "Grad Zagreb", "Zaprešić": "Zagrebačka", "Zaprešić - Okolica": "Zagrebačka", 
-              "Velika Gorica": "Zagrebačka", "Velika Gorica - Okolica": "Zagrebačka", "Samobor": "Zagrebačka", 
-              "Samobor - Okolica": "Zagrebačka", "Sveta Nedelja": "Zagrebačka", "Dugo Selo": "Zagrebačka", 
-              "Ivanić-Grad": "Zagrebačka", "Jastrebarsko": "Zagrebačka", "Sveti Ivan Zelina": "Zagrebačka", 
-              "Vrbovec": "Zagrebačka", "Rijeka": "Primorsko-goranska", "Krk": "Primorsko-goranska", 
-              "Dobrinj": "Primorsko-goranska", "Crikvenica": "Primorsko-goranska", "Malinska-Dubašnica": "Primorsko-goranska", 
-              "Opatija": "Primorsko-goranska", "Kastav": "Primorsko-goranska", "Viškovo": "Primorsko-goranska", 
-              "Baška": "Primorsko-goranska", "Omišalj": "Primorsko-goranska", "Punat": "Primorsko-goranska", 
-              "Vrbnik": "Primorsko-goranska", "Novi Vinodolski": "Primorsko-goranska", "Pula": "Istarska", "Poreč": "Istarska", 
-              "Rovinj": "Istarska", "Umag": "Istarska", "Vodnjan": "Istarska", "Medulin": "Istarska", "Labin": "Istarska", 
-              "Pazin": "Istarska", "Novigrad": "Istarska", "Split": "Splitsko-dalmatinska", "Kaštela": "Splitsko-dalmatinska", 
-              "Makarska": "Splitsko-dalmatinska", "Omiš": "Splitsko-dalmatinska", "Trogir": "Splitsko-dalmatinska", 
-              "Solin": "Splitsko-dalmatinska", "Sinj": "Splitsko-dalmatinska", "Brač": "Splitsko-dalmatinska", 
-              "Hvar": "Splitsko-dalmatinska", "Zadar": "Zadarska", "Biograd na Moru": "Zadarska", "Nin": "Zadarska", 
-              "Pag": "Zadarska", "Vir": "Zadarska", "Šibenik": "Šibensko-kninska", "Šibenik - Okolica": "Šibensko-kninska", 
-              "Vodice": "Šibensko-kninska", "Knin": "Šibensko-kninska", "Osijek": "Osječko-baranjska", "Đakovo": "Osječko-baranjska", 
-              "Našice": "Osječko-baranjska", "Valpovo": "Osječko-baranjska", "Beli Manastir": "Osječko-baranjska", 
-              "Belišće": "Osječko-baranjska", "Varaždin": "Varaždinska", "Karlovac": "Karlovačka", "Sisak": "Sisačko-moslavačka", 
-              "Slavonski Brod": "Brodsko-posavska", "Dubrovnik": "Dubrovačko-neretvanska", "Vinkovci": "Vukovarsko-srijemska", 
-              "Vukovar": "Vukovarsko-srijemska", "Koprivnica": "Koprivničko-križevačka", "Bjelovar": "Bjelovarsko-bilogorska", 
-              "Čakovec": "Međimurska", "Požega": "Požeško-slavonska", "Virovitica": "Virovitičko-podravska", "Gospić": "Ličko-senjska", 
-              "Otočac": "Ličko-senjska", "Novalja": "Ličko-senjska", "Krapina": "Krapinsko-zagorska"
-            };
-            locationCounty = cityToCounty[locationCity] || null;
+            locationCounty = CITY_TO_COUNTY[locationCity] || null;
           }
         }
       }
@@ -199,6 +305,14 @@ function parseListingsFromHTML(
         advertiserType = "Privatni";
       } else if (/agencij/i.test(item)) {
         advertiserType = "Agencija";
+      }
+
+      // Debug: log raw HTML for listings missing price or location so we can fix regexes
+      if (process.env.DEBUG_MISSING_FIELDS && (!price || !location)) {
+        console.warn(
+          `[Scraper][DEBUG] Missing fields for ${externalId} (price=${price}, location=${location})\n` +
+          `--- RAW ARTICLE HTML ---\n${item}\n--- END ---`
+        );
       }
 
       listings.push({
@@ -308,11 +422,12 @@ export async function scrapeNjuskalo(
 
           try {
             await page.goto(url, {
+              // networkidle can be blocked by ads/trackers; domcontentloaded
+              // fires early before Vue renders cards, so we wait for the
+              // first card selector explicitly below.
               waitUntil: "domcontentloaded",
               timeout: 30000,
             });
-
-            await randomDelay(1500, 3000);
 
             const title = await page.title();
             if (title.includes("ShieldSquare") || title.includes("Captcha")) {
@@ -320,14 +435,70 @@ export async function scrapeNjuskalo(
               break; // Stop this county
             }
 
+            // Wait for Vue to mount and render at least one listing card.
+            // This replaces the unreliable random delay that caused a race
+            // condition where page.content() was called before Vue hydrated.
+            try {
+              await page.waitForSelector('article[class*="entity-body"]', {
+                timeout: 15000,
+              });
+            } catch {
+              // No cards appeared — could be an empty page or bot block.
+              console.warn(`[Scraper] [${category}] No listing cards found on page ${pageNum} (empty or blocked).`);
+            }
+
+            // Human-like scroll after cards have loaded
             await page.evaluate(() => {
               window.scrollBy(0, Math.floor(Math.random() * 500) + 300);
             });
-            await randomDelay(500, 1000);
+            await randomDelay(300, 700);
 
             const html = await page.content();
             const pageListings = parseListingsFromHTML(html, category);
             console.log(`[Scraper] [${category}] [${county || "all"}] Page ${pageNum}: found ${pageListings.length} listings`);
+
+            // Enrich listings missing price/location by visiting their detail pages.
+            // This handles SuperVau (premium) cards that only show a teaser on the
+            // search results page but have full structured data on the detail page.
+            const incomplete = pageListings.filter((l) => !l.price || !l.location);
+            if (incomplete.length > 0) {
+              console.log(`[Scraper] [${category}] ${incomplete.length} listings missing data — visiting detail pages...`);
+              for (const listing of incomplete) {
+                if (!listing.url) continue;
+                try {
+                  await randomDelay(1500, 3000); // Human-like delay before each detail visit
+                  await page.goto(listing.url, {
+                    waitUntil: "domcontentloaded",
+                    timeout: 20000,
+                  });
+                  // Detail pages are server-rendered, no need for waitForSelector
+                  await randomDelay(500, 1000);
+                  const detailHtml = await page.content();
+                  const detail = parseDetailPageHTML(detailHtml);
+
+                  // Only fill in missing fields — don't overwrite existing ones
+                  if (!listing.price && detail.price) {
+                    listing.price = detail.price;
+                    listing.price_numeric = detail.priceNumeric;
+                  }
+                  if (!listing.location && detail.location) {
+                    listing.location = detail.location;
+                    listing.location_county = detail.locationCounty;
+                    listing.location_city = detail.locationCity;
+                    listing.location_neighborhood = detail.locationNeighborhood;
+                  }
+                  if (!listing.size_m2 && detail.sizeM2) {
+                    listing.size_m2 = detail.sizeM2;
+                  }
+
+                  console.log(
+                    `[Scraper] Enriched ${listing.external_id}: price=${listing.price}, location=${listing.location}, size=${listing.size_m2}`
+                  );
+                } catch (err) {
+                  console.warn(`[Scraper] Failed to enrich ${listing.external_id}:`, err);
+                }
+              }
+            }
 
             allListings.push(...pageListings);
 
