@@ -3,11 +3,12 @@
 import { useRef, useState, useEffect } from "react";
 
 interface FilterDropdownProps {
-  id: string;
+  id?: string;
   label: string;
   options: string[];
   selected: string[];
   onChange: (selected: string[]) => void;
+  icon?: React.ReactNode;
 }
 
 export default function FilterDropdown({
@@ -16,6 +17,7 @@ export default function FilterDropdown({
   options,
   selected,
   onChange,
+  icon,
 }: FilterDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -49,7 +51,7 @@ export default function FilterDropdown({
         : `${selected.length} odabrano`;
 
   return (
-    <div ref={ref} className="relative" id={`filter-${id}`}>
+    <div ref={ref} className="relative" id={`filter-${id || label.toLowerCase().replace(/\s+/g, "-")}`}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium border transition-all duration-150 ${
@@ -58,6 +60,7 @@ export default function FilterDropdown({
             : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
         }`}
       >
+        {icon && <span className="flex-shrink-0 text-gray-400 group-hover:text-gray-500">{icon}</span>}
         {displayText}
         <svg
           className={`w-3.5 h-3.5 transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}

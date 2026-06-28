@@ -8,6 +8,10 @@ export interface Listing {
   price_numeric: number | null;
   size_m2: number | null;
   location: string | null;
+  location_region: string | null;
+  location_county: string | null;
+  location_city: string | null;
+  location_neighborhood: string | null;
   property_type: string | null;
   transaction_type: string | null;
   advertiser_type: string | null;
@@ -32,6 +36,14 @@ export interface ScrapeRun {
   error_message: string | null;
 }
 
+export interface Buyer {
+  id: string;
+  name: string;
+  contact: string | null;
+  criteria: Record<string, any> | null;
+  created_at: string;
+}
+
 // Insert types (without auto-generated fields)
 export type ListingInsert = Omit<Listing, "id" | "created_at" | "notified"> & {
   notified?: boolean;
@@ -39,6 +51,11 @@ export type ListingInsert = Omit<Listing, "id" | "created_at" | "notified"> & {
 
 export type ScrapeRunInsert = Omit<ScrapeRun, "id"> & {
   id?: string;
+};
+
+export type BuyerInsert = Omit<Buyer, "id" | "created_at"> & {
+  id?: string;
+  created_at?: string;
 };
 
 // Property type options for filters

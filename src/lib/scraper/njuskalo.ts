@@ -4,6 +4,7 @@ interface ScrapeOptions {
   maxPages?: number;
   categories?: string[];
   delayMs?: number;
+  countySlug?: string | null;
 }
 
 const NJUSKALO_BASE = "https://www.njuskalo.hr";
@@ -117,11 +118,53 @@ function parseListingsFromHTML(
 
       // --- Location ---
       let location: string | null = null;
+      let locationCounty: string | null = null;
+      let locationCity: string | null = null;
+      let locationNeighborhood: string | null = null;
+
       const locMatch = item.match(
         /Lokacija:<\/span>\s*(?:<!--[\s\S]*?-->)?\s*([\s\S]*?)(?:<!--|<br|<\/div)/i
       );
       if (locMatch) {
         location = stripHtml(locMatch[1]) || null;
+        if (location) {
+          const parts = location.split(",").map((s) => s.trim());
+          if (parts.length > 0) locationCity = parts[0] || null;
+          if (parts.length > 1) locationNeighborhood = parts[1] || null;
+          
+          if (locationCity) {
+            const cityToCounty: Record<string, string> = {
+              "Donji Grad": "Grad Zagreb", "Gornji Grad - Medveščak": "Grad Zagreb", "Trnje": "Grad Zagreb", 
+              "Maksimir": "Grad Zagreb", "Peščenica - Žitnjak": "Grad Zagreb", "Novi Zagreb - Istok": "Grad Zagreb", 
+              "Novi Zagreb - Zapad": "Grad Zagreb", "Trešnjevka - Sjever": "Grad Zagreb", "Trešnjevka - Jug": "Grad Zagreb", 
+              "Črnomerec": "Grad Zagreb", "Gornja Dubrava": "Grad Zagreb", "Donja Dubrava": "Grad Zagreb", 
+              "Stenjevec": "Grad Zagreb", "Podsused - Vrapče": "Grad Zagreb", "Podsljeme": "Grad Zagreb", 
+              "Sesvete": "Grad Zagreb", "Brezovica": "Grad Zagreb", "Zaprešić": "Zagrebačka", "Zaprešić - Okolica": "Zagrebačka", 
+              "Velika Gorica": "Zagrebačka", "Velika Gorica - Okolica": "Zagrebačka", "Samobor": "Zagrebačka", 
+              "Samobor - Okolica": "Zagrebačka", "Sveta Nedelja": "Zagrebačka", "Dugo Selo": "Zagrebačka", 
+              "Ivanić-Grad": "Zagrebačka", "Jastrebarsko": "Zagrebačka", "Sveti Ivan Zelina": "Zagrebačka", 
+              "Vrbovec": "Zagrebačka", "Rijeka": "Primorsko-goranska", "Krk": "Primorsko-goranska", 
+              "Dobrinj": "Primorsko-goranska", "Crikvenica": "Primorsko-goranska", "Malinska-Dubašnica": "Primorsko-goranska", 
+              "Opatija": "Primorsko-goranska", "Kastav": "Primorsko-goranska", "Viškovo": "Primorsko-goranska", 
+              "Baška": "Primorsko-goranska", "Omišalj": "Primorsko-goranska", "Punat": "Primorsko-goranska", 
+              "Vrbnik": "Primorsko-goranska", "Novi Vinodolski": "Primorsko-goranska", "Pula": "Istarska", "Poreč": "Istarska", 
+              "Rovinj": "Istarska", "Umag": "Istarska", "Vodnjan": "Istarska", "Medulin": "Istarska", "Labin": "Istarska", 
+              "Pazin": "Istarska", "Novigrad": "Istarska", "Split": "Splitsko-dalmatinska", "Kaštela": "Splitsko-dalmatinska", 
+              "Makarska": "Splitsko-dalmatinska", "Omiš": "Splitsko-dalmatinska", "Trogir": "Splitsko-dalmatinska", 
+              "Solin": "Splitsko-dalmatinska", "Sinj": "Splitsko-dalmatinska", "Brač": "Splitsko-dalmatinska", 
+              "Hvar": "Splitsko-dalmatinska", "Zadar": "Zadarska", "Biograd na Moru": "Zadarska", "Nin": "Zadarska", 
+              "Pag": "Zadarska", "Vir": "Zadarska", "Šibenik": "Šibensko-kninska", "Šibenik - Okolica": "Šibensko-kninska", 
+              "Vodice": "Šibensko-kninska", "Knin": "Šibensko-kninska", "Osijek": "Osječko-baranjska", "Đakovo": "Osječko-baranjska", 
+              "Našice": "Osječko-baranjska", "Valpovo": "Osječko-baranjska", "Beli Manastir": "Osječko-baranjska", 
+              "Belišće": "Osječko-baranjska", "Varaždin": "Varaždinska", "Karlovac": "Karlovačka", "Sisak": "Sisačko-moslavačka", 
+              "Slavonski Brod": "Brodsko-posavska", "Dubrovnik": "Dubrovačko-neretvanska", "Vinkovci": "Vukovarsko-srijemska", 
+              "Vukovar": "Vukovarsko-srijemska", "Koprivnica": "Koprivničko-križevačka", "Bjelovar": "Bjelovarsko-bilogorska", 
+              "Čakovec": "Međimurska", "Požega": "Požeško-slavonska", "Virovitica": "Virovitičko-podravska", "Gospić": "Ličko-senjska", 
+              "Otočac": "Ličko-senjska", "Novalja": "Ličko-senjska", "Krapina": "Krapinsko-zagorska"
+            };
+            locationCounty = cityToCounty[locationCity] || null;
+          }
+        }
       }
 
       // --- Size (m²) ---
@@ -165,6 +208,10 @@ function parseListingsFromHTML(
         price_numeric: priceNumeric,
         size_m2: sizeM2,
         location,
+        location_region: null, // Scraper doesn't reliably get region, we get county/city
+        location_county: locationCounty,
+        location_city: locationCity,
+        location_neighborhood: locationNeighborhood,
         property_type: propertyType,
         transaction_type: transactionType,
         advertiser_type: advertiserType,
@@ -202,7 +249,7 @@ function randomDelay(minMs: number, maxMs: number): Promise<void> {
 export async function scrapeNjuskalo(
   options: ScrapeOptions = {}
 ): Promise<ListingInsert[]> {
-  const { maxPages = 1, categories = Object.keys(CATEGORIES), delayMs = 3000 } = options;
+  const { maxPages = 1, delayMs = 3000, categories = options.categories || Object.keys(CATEGORIES) } = options;
 
   const allListings: ListingInsert[] = [];
 
@@ -251,46 +298,50 @@ export async function scrapeNjuskalo(
       const categoryPath = CATEGORIES[category];
       if (!categoryPath) continue;
 
-      for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
-        const url = `${NJUSKALO_BASE}${categoryPath}?page=${pageNum}`;
-        console.log(`[Scraper] [${category}] Navigating to page ${pageNum}: ${url}`);
+      const countiesToScrape = options.countySlug ? options.countySlug.split(",") : [null];
 
-        try {
-          await page.goto(url, {
-            waitUntil: "domcontentloaded",
-            timeout: 30000,
-          });
+      for (const county of countiesToScrape) {
+        for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+          const basePath = county ? `${categoryPath}/${county}` : categoryPath;
+          const url = `${NJUSKALO_BASE}${basePath}?page=${pageNum}`;
+          console.log(`[Scraper] [${category}] [${county || "all"}] Navigating to page ${pageNum}: ${url}`);
 
-          await randomDelay(1500, 3000);
+          try {
+            await page.goto(url, {
+              waitUntil: "domcontentloaded",
+              timeout: 30000,
+            });
 
-          const title = await page.title();
-          if (title.includes("ShieldSquare") || title.includes("Captcha")) {
-            console.error(`[Scraper] Bot protection detected on ${category} page ${pageNum}.`);
-            break; // Stop this category
-          }
+            await randomDelay(1500, 3000);
 
-          await page.evaluate(() => {
-            window.scrollBy(0, Math.floor(Math.random() * 500) + 300);
-          });
-          await randomDelay(500, 1000);
+            const title = await page.title();
+            if (title.includes("ShieldSquare") || title.includes("Captcha")) {
+              console.error(`[Scraper] Bot protection detected on ${category} page ${pageNum}.`);
+              break; // Stop this county
+            }
 
-          const html = await page.content();
-          const pageListings = parseListingsFromHTML(html, category);
-          console.log(`[Scraper] [${category}] Page ${pageNum}: found ${pageListings.length} listings`);
+            await page.evaluate(() => {
+              window.scrollBy(0, Math.floor(Math.random() * 500) + 300);
+            });
+            await randomDelay(500, 1000);
 
-          allListings.push(...pageListings);
+            const html = await page.content();
+            const pageListings = parseListingsFromHTML(html, category);
+            console.log(`[Scraper] [${category}] [${county || "all"}] Page ${pageNum}: found ${pageListings.length} listings`);
 
-          if (pageNum < maxPages || categories.indexOf(category) < categories.length - 1) {
+            allListings.push(...pageListings);
+
+            // Delay between pages to avoid bot detection
             const delay = delayMs + Math.floor(Math.random() * 2000);
             console.log(`[Scraper] Waiting ${delay}ms before next action...`);
             await new Promise((resolve) => setTimeout(resolve, delay));
+          } catch (error) {
+            console.error(`[Scraper] Error on ${category} [${county || "all"}] page ${pageNum}:`, error);
+            break; // Stop this county on error
           }
-        } catch (error) {
-          console.error(`[Scraper] Error on ${category} page ${pageNum}:`, error);
-          break; // Stop this category on error
-        }
-      }
-    }
+        } // end pageNum loop
+      } // end county loop
+    } // end category loop
 
     await context.close();
   } finally {

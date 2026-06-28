@@ -2,11 +2,25 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { scrapeNjuskalo } from "@/lib/scraper/njuskalo";
 
-export const maxDuration = 120; // Playwright scraping needs more time
+export const maxDuration = 300; // Multi-county scraping can take several minutes
 
-export async function POST() {
+export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = getSupabaseServerClient() as any;
+
+  let maxPages = 1;
+  let countySlug: string | null = null;
+  try {
+    const body = await request.json();
+    if (body.pages && typeof body.pages === "number") {
+      maxPages = body.pages;
+    }
+    if (body.county && typeof body.county === "string") {
+      countySlug = body.county;
+    }
+  } catch (e) {
+    // ignore
+  }
 
   // Create a scrape run record
   const { data: scrapeRun, error: runError } = await supabase
@@ -29,7 +43,8 @@ export async function POST() {
   try {
     // Run the scraper
     const listings = await scrapeNjuskalo({
-      maxPages: 1,
+      maxPages: maxPages,
+      countySlug: countySlug,
       delayMs: 2000,
     });
 

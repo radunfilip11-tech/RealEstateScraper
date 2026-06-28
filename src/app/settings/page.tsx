@@ -209,7 +209,7 @@ export default function SettingsPage() {
                 Koliko stranica rezultata se skrapira
               </p>
             </div>
-            <span className="text-sm text-gray-600 font-medium">3</span>
+            <span className="text-sm text-gray-600 font-medium italic">Podesivo na ploči</span>
           </div>
         </div>
       </div>
@@ -250,6 +250,42 @@ export default function SettingsPage() {
               u <strong>.env.local</strong> datoteku.
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Test Section */}
+      <div className="bg-white border border-gray-200 rounded-xl px-5 py-5 mt-6">
+        <h3 className="text-base font-semibold text-gray-900 mb-2">Testiranje WhatsApp Obavijesti</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Unesite svoj broj u formatu <strong>whatsapp:+3859...</strong> i pošaljite testnu obavijest za nove oglase koji odgovaraju kriterijima kupaca u bazi.
+        </p>
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            id="testPhone"
+            placeholder="whatsapp:+3859..."
+            className="flex-1 max-w-sm text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+          />
+          <button
+            onClick={async () => {
+              const phoneInput = document.getElementById('testPhone') as HTMLInputElement;
+              if (!phoneInput?.value) return alert('Unesite broj mobitela');
+              try {
+                const res = await fetch('/api/notify', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ phone_number: phoneInput.value })
+                });
+                if (res.ok) alert('Test uspješan! Provjerite WhatsApp.');
+                else alert('Greška: ' + await res.text());
+              } catch (e) {
+                alert('Greška pri slanju.');
+              }
+            }}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            Pošalji test
+          </button>
         </div>
       </div>
     </div>

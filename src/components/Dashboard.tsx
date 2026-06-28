@@ -8,18 +8,22 @@ import StatsBar from "@/components/ui/StatsBar";
 import SearchBar from "@/components/ui/SearchBar";
 import FilterDropdown from "@/components/ui/FilterDropdown";
 import RangeFilter from "@/components/ui/RangeFilter";
+import LocationFilterDropdown from "@/components/ui/LocationFilterDropdown";
 import ListingCard from "@/components/ui/ListingCard";
-
 export default function Dashboard() {
   // Data state
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [scraping, setScraping] = useState(false);
   const [scrapeResult, setScrapeResult] = useState<string | null>(null);
+  const [scrapePages, setScrapePages] = useState<number>(1);
+  const [scrapeCounty, setScrapeCounty] = useState<string>("");
 
   // Filter state
   const [search, setSearch] = useState("");
-  const [locationSearch, setLocationSearch] = useState("");
+  const [selectedCounties, setSelectedCounties] = useState<string[]>([]);
+  const [selectedCities, setSelectedCities] = useState<string[]>([]);
+  const [selectedNeighborhoods, setSelectedNeighborhoods] = useState<string[]>([]);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [selectedPropertyTypes, setSelectedPropertyTypes] = useState<string[]>([]);
   const [selectedTransactionTypes, setSelectedTransactionTypes] = useState<string[]>([]);
@@ -31,6 +35,31 @@ export default function Dashboard() {
   const [sizeMin, setSizeMin] = useState<number | null>(null);
   const [sizeMax, setSizeMax] = useState<number | null>(null);
   const [sort, setSort] = useState<string>("newest");
+
+  // All known locations for the autocomplete dropdown
+  const [allLocations, setAllLocations] = useState<
+    { county: string | null; city: string | null; neighborhood: string | null }[]
+  >([]);
+
+  // Fetch all unique locations once
+  useEffect(() => {
+    async function fetchLocations() {
+      const supabase = getSupabaseBrowserClient() as any;
+      const { data } = await supabase
+        .from("listings")
+        .select("location_county, location_city, location_neighborhood");
+      if (data) {
+        setAllLocations(
+          data.map((row: any) => ({
+            county: row.location_county,
+            city: row.location_city,
+            neighborhood: row.location_neighborhood,
+          }))
+        );
+      }
+    }
+    fetchLocations();
+  }, []);
 
   // Fetch listings from Supabase
   const fetchListings = useCallback(async () => {
@@ -59,8 +88,14 @@ export default function Dashboard() {
       if (selectedPropertyTypes.length > 0) {
         query = query.in("property_type", selectedPropertyTypes);
       }
-      if (locationSearch) {
-        query = query.ilike("location", `%${locationSearch}%`);
+      if (selectedCounties.length > 0) {
+        query = query.in("location_county", selectedCounties);
+      }
+      if (selectedCities.length > 0) {
+        query = query.in("location_city", selectedCities);
+      }
+      if (selectedNeighborhoods.length > 0) {
+        query = query.in("location_neighborhood", selectedNeighborhoods);
       }
       if (selectedTransactionTypes.length > 0) {
         query = query.in("transaction_type", selectedTransactionTypes);
@@ -89,7 +124,7 @@ export default function Dashboard() {
         query = query.lte("size_m2", sizeMax);
       }
 
-      const { data, error } = await query.limit(100);
+      const { data, error } = await query.limit(1000);
 
       if (error) {
         console.error("Error fetching listings:", error);
@@ -103,7 +138,9 @@ export default function Dashboard() {
     }
   }, [
     search,
-    locationSearch,
+    selectedCounties,
+    selectedCities,
+    selectedNeighborhoods,
     selectedSources,
     selectedPropertyTypes,
     selectedTransactionTypes,
@@ -126,7 +163,14 @@ export default function Dashboard() {
     setScraping(true);
     setScrapeResult(null);
     try {
-      const res = await fetch("/api/scrape", { method: "POST" });
+      const res = await fetch("/api/scrape", { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          pages: scrapePages,
+          county: scrapeCounty || undefined
+        }),
+      });
       const data = await res.json();
       if (res.ok) {
         setScrapeResult(
@@ -167,6 +211,9 @@ export default function Dashboard() {
 
   const clearAllFilters = () => {
     setSearch("");
+    setSelectedCounties([]);
+    setSelectedCities([]);
+    setSelectedNeighborhoods([]);
     setSelectedSources([]);
     setSelectedPropertyTypes([]);
     setSelectedAdvertiserTypes([]);
@@ -180,7 +227,7 @@ export default function Dashboard() {
   // Handle hide listing
   const handleHideListing = async (id: string) => {
     try {
-      const supabase = getSupabaseBrowserClient();
+      const supabase = getSupabaseBrowserClient() as any;
       const { error } = await supabase
         .from("listings")
         .update({ hidden: true })
@@ -199,7 +246,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="flex-1">
+    <div className="flex-1 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -208,12 +255,54 @@ export default function Dashboard() {
             Pregled svih skrapanih nekretnina
           </p>
         </div>
-        <button
-          id="scrape-button"
-          onClick={handleScrape}
-          disabled={scraping}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 shadow-sm hover:shadow"
-        >
+        <div className="flex items-center gap-3">
+          <select
+            value={scrapeCounty}
+            onChange={(e) => setScrapeCounty(e.target.value)}
+            disabled={scraping}
+            className="text-sm bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors cursor-pointer w-44"
+            title="Županija za skrapanje"
+          >
+            <option value="">Sve županije (Cijela HR)</option>
+            
+            <optgroup label="Makro regije">
+              <option value="zadarska,sibensko-kninska,splitsko-dalmatinska,dubrovacko-neretvanska">Dalmacija</option>
+              <option value="istarska,primorsko-goranska">Istra i Kvarner</option>
+              <option value="osjecko-baranjska,vukovarsko-srijemska,brodsko-posavska,pozesko-slavonska,viroviticko-podravska">Slavonija</option>
+            </optgroup>
+
+            <optgroup label="Pojedinačne Županije">
+              <option value="grad-zagreb">Grad Zagreb</option>
+              <option value="zagrebacka">Zagrebačka</option>
+              <option value="splitsko-dalmatinska">Splitsko-dalmatinska</option>
+              <option value="primorsko-goranska">Primorsko-goranska</option>
+              <option value="istarska">Istarska</option>
+              <option value="zadarska">Zadarska</option>
+              <option value="sibensko-kninska">Šibensko-kninska</option>
+              <option value="dubrovacko-neretvanska">Dubrovačko-neretvanska</option>
+              <option value="osjecko-baranjska">Osječko-baranjska</option>
+              <option value="varazdinska">Varaždinska</option>
+            </optgroup>
+          </select>
+          <select
+            value={scrapePages}
+            onChange={(e) => setScrapePages(Number(e.target.value))}
+            disabled={scraping}
+            className="text-sm bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors cursor-pointer"
+            title="Broj stranica za skrapanje (svaka stranica ima 35 oglasa)"
+          >
+            <option value={1}>1 stranica (Brzo)</option>
+            <option value={2}>2 stranice</option>
+            <option value={3}>3 stranice</option>
+            <option value={5}>5 stranica (Duboko)</option>
+            <option value={10}>10 stranica (Sveobuhvatno)</option>
+          </select>
+          <button
+            id="scrape-button"
+            onClick={handleScrape}
+            disabled={scraping}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 shadow-sm hover:shadow"
+          >
           {scraping ? (
             <>
               <svg
@@ -256,6 +345,7 @@ export default function Dashboard() {
             </>
           )}
         </button>
+        </div>
       </div>
 
       {/* Scrape result banner */}
@@ -287,19 +377,17 @@ export default function Dashboard() {
         id="filters-bar"
         className="flex items-center gap-2 flex-wrap mb-6"
       >
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Lokacija..."
-            value={locationSearch}
-            onChange={(e) => setLocationSearch(e.target.value)}
-            className="inline-flex items-center gap-2 pl-9 pr-3.5 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 bg-white placeholder:text-gray-500 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 w-40 transition-colors"
-          />
-          <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </div>
+        <LocationFilterDropdown
+          locations={allLocations}
+          selectedCounties={selectedCounties}
+          selectedCities={selectedCities}
+          selectedNeighborhoods={selectedNeighborhoods}
+          onSelectionChange={(c, ci, n) => {
+            setSelectedCounties(c);
+            setSelectedCities(ci);
+            setSelectedNeighborhoods(n);
+          }}
+        />
 
         <FilterDropdown
           label="Transakcija"

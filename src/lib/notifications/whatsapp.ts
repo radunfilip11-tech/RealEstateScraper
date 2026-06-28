@@ -73,29 +73,24 @@ export async function sendNewListingNotification(
 }
 
 /**
- * Send a summary notification for multiple new listings
+ * Send a notification to the agent with the matched listings
  */
-export async function sendBatchNotification(
-  listings: Listing[],
+export async function sendAgentNotification(
+  matchedMessages: string[],
   toPhoneNumber: string
 ): Promise<boolean> {
-  if (listings.length === 0) return true;
+  if (matchedMessages.length === 0) return true;
 
   try {
     const client = getTwilioClient();
     const fromNumber = process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+14155238886";
 
     const message = [
-      `🏠 *${listings.length} novih oglasa!*`,
+      `🎯 *Nove prilike za vaše kupce!*`,
       "",
-      ...listings.slice(0, 5).map(
-        (l, i) =>
-          `${i + 1}. ${l.title}${l.price ? ` — ${l.price}` : ""}${l.location ? ` (${l.location})` : ""}`
-      ),
-      listings.length > 5 ? `\n...i još ${listings.length - 5} oglasa.` : "",
-      "",
-      "Otvorite dashboard za pregled svih oglasa.",
-    ].join("\n");
+      ...matchedMessages.slice(0, 10), // Limit to 10 to avoid huge messages
+      matchedMessages.length > 10 ? `\n...i još ${matchedMessages.length - 10} prilika.` : "",
+    ].join("\n\n");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (client as any).messages.create({
@@ -105,11 +100,11 @@ export async function sendBatchNotification(
     });
 
     console.log(
-      `[WhatsApp] Batch notification sent (${listings.length} listings) to ${toPhoneNumber}`
+      `[WhatsApp] Agent notification sent (${matchedMessages.length} matches) to ${toPhoneNumber}`
     );
     return true;
   } catch (error) {
-    console.error("[WhatsApp] Failed to send batch notification:", error);
+    console.error("[WhatsApp] Failed to send agent notification:", error);
     return false;
   }
 }

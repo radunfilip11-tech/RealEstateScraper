@@ -1,0 +1,61 @@
+name: Run Scraper and Notifications
+
+on:
+  schedule:
+    # Run every 4 hours (e.g., 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)
+    # Adjust as needed. Running too often might trigger Njuškalo bot protection.
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # Allow manual triggering from the GitHub Actions UI
+
+jobs:
+  scrape-and-notify:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Scraper
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
+        run: npm run scrape
+
+      - name: Trigger Notifications
+        # We hit the notification API endpoint. We need the base URL of our deployed app.
+        # Alternatively, we could run a local script that calls the notification logic directly.
+        # Running a local script is better for a cron job to avoid network timeouts.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
+          AGENT_PHONE_NUMBER: ${{ secrets.AGENT_PHONE_NUMBER }} # Define this secret in GitHub
+        run: |
+          # We'll run a custom script to handle notifications directly against the DB
+          # Since the Next.js API route expects a request, we can just fetch against the local next dev server,
+          # OR write a tiny CLI wrapper for the notification logic.
+          # For simplicity, if you deploy to Vercel, you can just curl the production URL:
+          # curl -X POST https://your-vercel-domain.vercel.app/api/notify \
+          #   -H "Content-Type: application/json" \
+          #   -d "{\"phone_number\":\"${AGENT_PHONE_NUMBER}\"}"
+          
+          echo "Run notification logic here or via webhook"
