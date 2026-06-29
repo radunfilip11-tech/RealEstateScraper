@@ -1,5 +1,26 @@
 # Development Log
 
+## [2026-06-29] Performance & Monitoring Upgrades (Live Monitor)
+- **Goal**: Allow real-time inspection of the scraper to evaluate efficiency, ensure only "Private" ads are saved correctly, and determine if the 15-minute polling interval is sufficient or needs optimization.
+- **Two-Phase Scraper**:
+  - The script was refactored from a one-off Vercel/Next.js API route into a persistent background Node process (`monitor.ts`).
+  - **Phase 1 (Search):** A single Playwright context loads category page 1 to execute JS and bypass ShieldSquare.
+  - **Phase 2 (Details):** For newly discovered `external_id`s, we extract the Playwright cookies and use native HTTP `fetch` to instantly grab the detail page. This avoids the huge overhead of Playwright rendering each ad. The detail fetch is artificially delayed by ~1 sec (`randomDelay(500, 1500)`) to simulate human reading speed and prevent soft IP bans.
+- **Live Monitor Dashboard**:
+  - Created `/monitor` page for side-by-side verification.
+  - **Left Pane:** Uses Supabase Realtime to stream newly inserted `listings` instantly to the UI. The scraper was temporarily set to **only save Private ads** into the DB to provide a clean testing environment for the user.
+  - **Right Pane:** Uses a new `scraper_console_logs` table (also via Supabase Realtime) to stream terminal output directly to the browser.
+  - **Controls:** Built an API route `/api/monitor/control` to Start, Stop (via a `.pid` file lock), and Clear Database directly from the web UI.
+
+### Strategy Notes: Scaling the Scraper Speed
+If the current ~15 minute full-cycle interval is too slow, these are the evaluated scale-up strategies:
+1. **The Bottleneck**: Njuškalo's ShieldSquare tracks IP address velocity. Dropping category delays below 20-30s from a single IP will quickly result in Captchas. 
+2. **VPS ($5/mo)**: Required to keep the script running 24/7 (so the user's laptop doesn't need to stay on). This does *not* solve the IP speed limit.
+3. **Proxies ($30+/mo)**: To achieve < 1 minute latency, the script must rotate through 10-20 different IP addresses. 
+    - **Residential (Pay-per-GB)**: The script uses ~500KB per minute (HTML only, no images). Running at 1-min intervals = ~22 GB/month = ~$110/mo.
+    - **Datacenter/ISP Proxies**: Renting 10 static ISP proxies costs ~$25/mo flat rate, which is the recommended path if sub-minute latency is required.
+
+---
 ## [2026-06-29] SuperVau Card Data Enrichment via Detail Page Scraping
 - **Problem**: Some listings appeared in the dashboard without price, location, or size data, even though those fields existed on Njuškalo's detail page.
 - **Root Cause**: Njuškalo uses 3 card types on search results pages:
@@ -71,4 +92,4 @@
 - **Region**: `eu-west-3` (Paris)
 - **URL**: `https://xlaaatbkorktjgbmjtkl.supabase.co`
 - **Tables Created**: `public.listings` (RLS enabled, public read allowed), `public.scrape_runs` (RLS enabled, public read allowed)
-- **Configuration File**: Created [.env.local](file:///c:/Users/Red%20Dragon/Documents/ANTIGRAVITY/Nekretnine/.env.local) with the keys.
+- **Configuration File**: Created .env.local with the keys.
