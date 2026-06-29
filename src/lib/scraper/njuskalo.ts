@@ -7,9 +7,9 @@ interface ScrapeOptions {
   countySlug?: string | null;
 }
 
-const NJUSKALO_BASE = "https://www.njuskalo.hr";
+export const NJUSKALO_BASE = "https://www.njuskalo.hr";
 
-const CATEGORIES: Record<string, string> = {
+export const CATEGORIES: Record<string, string> = {
   stanovi: "/prodaja-stanova",
   kuce: "/prodaja-kuca",
   zemljista: "/prodaja-zemljista",
@@ -25,7 +25,7 @@ const CATEGORIES: Record<string, string> = {
 /**
  * Strip HTML tags and Vue/SSR comment nodes from a string.
  */
-function stripHtml(s: string): string {
+export function stripHtml(s: string): string {
   return s
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<[^>]+>/g, "")
@@ -38,7 +38,7 @@ function stripHtml(s: string): string {
  * City-to-county mapping for resolving county from city name.
  * Used by both search card parser and detail page parser.
  */
-const CITY_TO_COUNTY: Record<string, string> = {
+export const CITY_TO_COUNTY: Record<string, string> = {
   "Donji Grad": "Grad Zagreb", "Gornji Grad - Medveščak": "Grad Zagreb", "Trnje": "Grad Zagreb",
   "Maksimir": "Grad Zagreb", "Peščenica - Žitnjak": "Grad Zagreb", "Novi Zagreb - Istok": "Grad Zagreb",
   "Novi Zagreb - Zapad": "Grad Zagreb", "Trešnjevka - Sjever": "Grad Zagreb", "Trešnjevka - Jug": "Grad Zagreb",
@@ -94,7 +94,7 @@ const CITY_TO_COUNTY: Record<string, string> = {
  *   Size:     <dt>Površina|Stambena površina</dt><dd>999,00 m²</dd>
  *   (all inside ClassifiedDetailBasicDetails-list)
  */
-function parseDetailPageHTML(html: string): {
+export function parseDetailPageHTML(html: string): {
   price: string | null;
   priceNumeric: number | null;
   location: string | null;
@@ -102,6 +102,7 @@ function parseDetailPageHTML(html: string): {
   locationCity: string | null;
   locationNeighborhood: string | null;
   sizeM2: number | null;
+  advertiserType: string | null;
 } {
   let price: string | null = null;
   let priceNumeric: number | null = null;
@@ -110,6 +111,7 @@ function parseDetailPageHTML(html: string): {
   let locationCity: string | null = null;
   let locationNeighborhood: string | null = null;
   let sizeM2: number | null = null;
+  let advertiserType: string | null = null;
 
   // --- Price ---
   const priceMatch = html.match(
@@ -163,7 +165,12 @@ function parseDetailPageHTML(html: string): {
     if (!isNaN(parsed)) sizeM2 = parsed;
   }
 
-  return { price, priceNumeric, location, locationCounty, locationCity, locationNeighborhood, sizeM2 };
+  // --- Advertiser type ---
+  if (/korisnik nije trgovac/i.test(html)) {
+    advertiserType = "Privatni";
+  }
+
+  return { price, priceNumeric, location, locationCounty, locationCity, locationNeighborhood, sizeM2, advertiserType };
 }
 
 /**
@@ -187,7 +194,7 @@ function parseDetailPageHTML(html: string): {
  * paragraph and NO price/location data. These are enriched by visiting the
  * detail page after initial parsing (see enrichIncompleteListings).
  */
-function parseListingsFromHTML(
+export function parseListingsFromHTML(
   html: string,
   category: string
 ): ListingInsert[] {
@@ -301,10 +308,8 @@ function parseListingsFromHTML(
 
       // --- Advertiser type ---
       let advertiserType: string | null = null;
-      if (/privatni/i.test(item)) {
+      if (/korisnik nije trgovac/i.test(item)) {
         advertiserType = "Privatni";
-      } else if (/agencij/i.test(item)) {
-        advertiserType = "Agencija";
       }
 
       // Debug: log raw HTML for listings missing price or location so we can fix regexes
@@ -348,7 +353,7 @@ function parseListingsFromHTML(
 /**
  * Random delay between min and max milliseconds to mimic human behavior.
  */
-function randomDelay(minMs: number, maxMs: number): Promise<void> {
+export function randomDelay(minMs: number, maxMs: number): Promise<void> {
   const ms = Math.floor(Math.random() * (maxMs - minMs)) + minMs;
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -460,7 +465,8 @@ export async function scrapeNjuskalo(
             // Enrich listings missing price/location by visiting their detail pages.
             // This handles SuperVau (premium) cards that only show a teaser on the
             // search results page but have full structured data on the detail page.
-            const incomplete = pageListings.filter((l) => !l.price || !l.location);
+            // Also visit if advertiser type is missing, since it might only be on the detail page.
+            const incomplete = pageListings.filter((l) => !l.price || !l.location || !l.advertiser_type);
             if (incomplete.length > 0) {
               console.log(`[Scraper] [${category}] ${incomplete.length} listings missing data — visiting detail pages...`);
               for (const listing of incomplete) {
@@ -489,6 +495,9 @@ export async function scrapeNjuskalo(
                   }
                   if (!listing.size_m2 && detail.sizeM2) {
                     listing.size_m2 = detail.sizeM2;
+                  }
+                  if (!listing.advertiser_type && detail.advertiserType) {
+                    listing.advertiser_type = detail.advertiserType;
                   }
 
                   console.log(
@@ -522,4 +531,92 @@ export async function scrapeNjuskalo(
 
   console.log(`[Scraper] Total listings scraped: ${allListings.length}`);
   return allListings;
+}
+
+/**
+ * Lightweight search-page-only scrape for the continuous monitor.
+ * Uses an EXISTING Playwright page (browser stays alive across cycles).
+ * Returns raw listing stubs from page 1 of a single category.
+ */
+export async function scrapeSearchPageOnly(
+  page: any,
+  category: string
+): Promise<{ listings: ListingInsert[]; blocked: boolean }> {
+  const categoryPath = CATEGORIES[category];
+  if (!categoryPath) return { listings: [], blocked: false };
+
+  const url = `${NJUSKALO_BASE}${categoryPath}?sort=new`;
+  console.log(`[Monitor] [${category}] Loading search page: ${url}`);
+
+  try {
+    await page.goto(url, {
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
+    });
+
+    const title = await page.title();
+    if (title.includes("ShieldSquare") || title.includes("Captcha")) {
+      console.error(`[Monitor] [${category}] Bot protection detected!`);
+      return { listings: [], blocked: true };
+    }
+
+    // Wait for Vue to render listing cards
+    try {
+      await page.waitForSelector('article[class*="entity-body"]', {
+        timeout: 15000,
+      });
+    } catch {
+      console.warn(`[Monitor] [${category}] No listing cards found (empty or blocked).`);
+      return { listings: [], blocked: false };
+    }
+
+    // Human-like scroll
+    await page.evaluate(() => {
+      window.scrollBy(0, Math.floor(Math.random() * 500) + 300);
+    });
+    await randomDelay(300, 600);
+
+    const html = await page.content();
+    const listings = parseListingsFromHTML(html, category);
+    console.log(`[Monitor] [${category}] Found ${listings.length} listings on page 1.`);
+
+    return { listings, blocked: false };
+  } catch (error) {
+    console.error(`[Monitor] [${category}] Error loading search page:`, error);
+    return { listings: [], blocked: false };
+  }
+}
+
+/**
+ * Fetch a detail page using raw HTTP fetch with stolen Playwright cookies.
+ * ~10x faster than navigating Playwright to the page.
+ * Returns the parsed detail data including advertiser type.
+ */
+export async function fetchDetailPageHTTP(
+  url: string,
+  cookies: { name: string; value: string; domain: string }[],
+  userAgent: string
+): Promise<ReturnType<typeof parseDetailPageHTML>> {
+  // Build cookie header string
+  const cookieHeader = cookies
+    .filter((c) => url.includes(c.domain) || c.domain.includes("njuskalo"))
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
+
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": userAgent,
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "hr-HR,hr;q=0.9,en-US;q=0.8,en;q=0.7",
+      "Cookie": cookieHeader,
+      "Referer": "https://www.njuskalo.hr/",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} for ${url}`);
+  }
+
+  const html = await response.text();
+  return parseDetailPageHTML(html);
 }
