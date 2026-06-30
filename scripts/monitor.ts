@@ -300,7 +300,7 @@ async function runMonitor() {
 
             try {
               // Small delay between detail fetches to not look like a bot
-              await randomDelay(500, 1500);
+              await randomDelay(500, 1400);
 
               const detail = await fetchDetailPageHTTP(listing.url, cookies, userAgent);
 
