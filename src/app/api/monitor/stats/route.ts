@@ -36,7 +36,7 @@ export async function GET() {
           const published = new Date(l.published_at).getTime();
           return created - published;
         })
-        .filter((ms: number) => ms > 0 && ms < 24 * 60 * 60 * 1000); // Filter out unreasonable values
+        .filter((ms: number) => ms > 0 && ms < 20 * 60 * 1000); // Filter out values > 20 mins to ignore promoted ads
 
       if (latencies.length > 0) {
         avgLatencyMs = Math.round(latencies.reduce((a: number, b: number) => a + b, 0) / latencies.length);
@@ -126,7 +126,7 @@ export async function GET() {
 
         for (let i = 1; i < timestamps.length; i++) {
           const gap = timestamps[i] - timestamps[i - 1];
-          if (gap > 0 && gap < 2 * 60 * 60 * 1000) { // Ignore > 2hr gaps (restarts)
+          if (gap > 0 && gap < 20 * 60 * 1000) { // Ignore > 20 min gaps (restarts/stops)
             catTotalGaps += gap;
             catGapCount++;
             grandTotalGaps += gap;

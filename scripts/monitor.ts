@@ -74,8 +74,8 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const CATEGORY_DELAY_MS = { min: 20000, max: 30000 }; // 20-30s between categories
-const CYCLE_REST_MS = { min: 60000, max: 90000 };    // 1-1.5 min rest between full cycles
+const CATEGORY_DELAY_MS = { min: 6500, max: 9000 }; // 10-15s between categories
+const CYCLE_REST_MS = { min: 9000, max: 15000 };    // 30-45s rest between full cycles
 const BLOCKED_BACKOFF_MS = 600000;                       // 10 min backoff if blocked
 
 const USER_AGENTS = [
@@ -185,7 +185,7 @@ async function runMonitor() {
     try { await context.close(); } catch { /* ignore */ }
     try { await browser.close(); } catch { /* ignore */ }
     await dbLog(`Final stats: ${totalCycles} cycles, ${totalNewAds} new ads found, ${totalPrivateAds} private ads. Uptime: ${formatUptime()}`, "success");
-    
+
     // Remove PID file
     if (fs.existsSync(PID_FILE)) {
       fs.unlinkSync(PID_FILE);
@@ -328,7 +328,7 @@ async function runMonitor() {
               }
 
               const isPrivate = listing.advertiser_type === "Privatni";
-              
+
               if (isPrivate) {
                 cyclePrivateAds++;
                 privateListingsToSave.push(listing);
@@ -364,7 +364,7 @@ async function runMonitor() {
               cycleNewAds += privateListingsToSave.length;
             }
           } else {
-             await dbLog(`[${category}] No private ads found in this batch.`, "info");
+            await dbLog(`[${category}] No private ads found in this batch.`, "info");
           }
         }
       }
