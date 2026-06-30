@@ -172,8 +172,8 @@ export function parseDetailPageHTML(html: string): {
     advertiserType = "Privatni";
   }
 
-  // --- Promoted (detail page contains "oglas je istaknut" or "istaknut" badge) ---
-  const isPromoted = /istaknut/i.test(stripHtml(html)) || /VauVau/i.test(html) || /SuperVau/i.test(html);
+  // --- Promoted (detail page contains "Istaknuto oglašavanje") ---
+  const isPromoted = /istaknuto ogla/i.test(html) || /VauVau/i.test(html) || /SuperVau/i.test(html);
 
   // --- Published at (detail page has <time datetime="..."> element) ---
   let publishedAt: string | null = null;

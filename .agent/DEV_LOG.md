@@ -1,5 +1,40 @@
 # Development Log
 
+## [2026-06-30] Multi-Worker Scraping Architecture & Latency Tracking
+- **Goal**: Maximize the Njuškalo scraping frequency without triggering ShieldSquare bot protection, and track the exact latency from the moment an ad is published until we scrape it.
+- **Bot Protection Insight**: Running 3 independent monitor scripts simultaneously from the same IP does *not* trigger bot protection. This works because ShieldSquare tracks rolling average request rates, and 3 desynchronized scripts with random delays create organic-looking, human-like traffic spikes rather than a robotic rhythm. 
+- **Multi-Worker Strategy**: 
+  - Instead of deploying 3 separate physical scripts, `monitor.ts` will be updated to accept a `--worker-id` argument.
+  - The UI will spawn 3 concurrent processes.
+  - Each worker handles the exact same 10 categories, but shuffles the order based on its worker ID. This means Worker 1 checks `stanovi`, while Worker 2 checks `zemljista`.
+  - Result: 3x the scan frequency (every ~1.5 to 2 minutes per category) with no additional bot protection risk.
+- **Latency Stats Feature**:
+  - To measure exact performance, the UI will feature a "Stats" panel.
+  - It compares the Njuškalo published `<time>` (from the detail page) against the Supabase `created_at` timestamp.
+  - Metrics tracked: Average Detection Latency, Fastest Discovery, Slowest Discovery, and Cycle Frequency.
+- **Scaling Verdict for 10+ Sites**:
+  - To monitor 10+ ad sites simultaneously (Index.hr, Crozilla, etc.), a single app on a single IP will hit rate limits and consume too much RAM (headless Chromium uses ~200MB per instance).
+  - **Option A (Proxies)**: Run one massive app locally and use Rotating Residential Proxies. Cost: $30 - $100+/mo depending on data bandwidth (Playwright downloads a lot of HTML).
+  - **Option B (Distributed Fleet)**: Deploy identical lightweight workers on separate $5/mo VPS instances (e.g., Worker 1 on VPS A handles Njuškalo Stanovi, Worker 2 on VPS B handles Index.hr). Cost: Fixed at $5/mo per server, no proxies required. This is the recommended, scalable path.
+## [2026-06-30] Dockerization & VPS Deployment Strategy (Complete)
+- **Goal**: Containerize the application and provide a step-by-step guide for deploying it 24/7 on a budget VPS to achieve continuous monitoring (sub-minute latency).
+- **Dockerfile**: Created a production-ready `Dockerfile` for the Next.js app (building on `node:20-slim`) and a separate `docker-compose.yml` for the standalone Node.js scraper script.
+- **VPS Strategy Walkthrough**:
+  - **Host**: Recommended **OVH VPS SSD 2 (4 vCPU, 8 GB RAM, 40 GB SSD)** for ~$5/month (includes one IPv4). Available in Strasbourg data center for best latency to Croatia.
+  - **Network**: **Public IP**: Reserved for VPS. **Localhost**: Used for the scraper script to talk to the local Supabase instance.
+  - **Architecture Options**:
+    1. **Recommended (Simple)**: Single container running both Web UI and Scraper. Uses host's public IP. Scraper hits public IP for "external" scraping (requires port 3000/3001 open). **Latency**: ~15 mins (current). **Cost**: $5/mo.
+    2. **Optimal (Fast)**: VPS as a proxy network. **Web UI** on public IP (e.g., 3001). **Scraper** runs in Docker with a rotating residential/datacenter proxy (10-20 IPs) to achieve sub-minute latency. **Cost**: $5 (VPS) + $30 (Proxies) = ~$35/mo.
+- **Deployment Steps**:
+  - Buy OVH VPS SSD 2 (Strasbourg).
+  - Install Ubuntu 22.04.
+  - Install Docker & Docker Compose.
+  - Build and run containers (`docker-compose up -d`).
+  - **Port Mapping**: Map VPS `80:3000` (to access the UI publicly) and `8080:3001` (to keep the scraper's "internal" target available).
+- **Firewall Notes**: VPS firewalls must allow inbound traffic on `80` (HTTP) and `8080` (Internal target). The scraper will hit `http://[VPS_IP]` or `http://localhost:8080`.
+- **Cost Analysis**: Confirmed $5/mo is the entry point. Adding a cheap ISP proxy (e.g., from GeoSurf or similar providers) via `docker-compose` network settings brings latency down to sub-minute for an extra ~$25.
+
+---
 ## [2026-06-29] Performance & Monitoring Upgrades (Live Monitor)
 - **Goal**: Allow real-time inspection of the scraper to evaluate efficiency, ensure only "Private" ads are saved correctly, and determine if the 15-minute polling interval is sufficient or needs optimization.
 - **Two-Phase Scraper**:

@@ -93,11 +93,18 @@ export default function ListingCard({ listing, onHide }: ListingCardProps) {
           )}
 
           {/* Description */}
-          {listing.description && (
-            <p className="text-xs text-gray-400 line-clamp-2 mb-2">
-              {listing.description}
-            </p>
-          )}
+          {listing.description && (() => {
+            const cleaned = listing.description
+              .replace(/Lokacija:\s*[^\n]*/gi, "")
+              .replace(/Stambena površina:\s*[^\n]*/gi, "")
+              .replace(/\s{2,}/g, " ")
+              .trim();
+            return cleaned ? (
+              <p className="text-xs text-gray-400 line-clamp-2 mb-2">
+                {cleaned}
+              </p>
+            ) : null;
+          })()}
         </div>
 
         {/* Bottom row: badges + price */}
