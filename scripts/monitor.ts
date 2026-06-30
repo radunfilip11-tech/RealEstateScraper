@@ -1,7 +1,7 @@
 /**
  * Continuous Njuškalo Real Estate Monitor
  * 
- * Runs as a long-lived background process. Cycles through all 10 real estate
+ * Runs as a long-lived background process. Cycles through assigned real estate
  * categories, detecting new ads and checking if they are private
  * ("Korisnik nije trgovac") via fast HTTP fetch of detail pages.
  * 
@@ -10,20 +10,25 @@
  * Architecture:
  *   1. A single Playwright browser stays alive across all cycles.
  *   2. For each category, we load page 1 (Playwright, needed for JS rendering).
- *   3. We compare the external_ids against the database to find truly new ads.
+ *   3. We compare the external_ids against both the listings table (private ads)
+ *      and seen_listings table (agency ads we've already checked) to find truly new ads.
  *   4. For each new ad, we use raw HTTP fetch (with stolen Playwright cookies)
  *      to instantly load the detail page and check for "Korisnik nije trgovac".
- *   5. New ads are saved to Supabase. Private ones are flagged.
+ *   5. Private ads are saved to the listings table. Agency ads are tracked in
+ *      seen_listings to prevent redundant detail-page fetches in future cycles.
  *   6. After all categories, we rest and repeat.
  * 
- * Multi-Worker Mode:
- *   Each worker gets a unique ID (1, 2, 3). Categories are shuffled based on
- *   the worker ID so that workers scan different categories at different times,
- *   maximizing coverage and reducing duplicate work.
+ * Weighted Load Balancing (2 workers):
+ *   Worker 1: High-traffic sprint — only 4 categories (~1min cycle).
+ *             stanovi, kuce, zemljista, najam_stanova.
+ *   Worker 2: Full coverage — all 17 categories (~4-5min cycle).
+ *             High-traffic categories interleaved for even spacing.
+ *   Combined: high-traffic scanned every ~50s, low-traffic every ~4-5min.
  */
 
 import {
   CATEGORIES,
+  WORKER_CATEGORIES,
   NJUSKALO_BASE,
   scrapeSearchPageOnly,
   fetchDetailPageHTTP,
@@ -74,9 +79,9 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const CATEGORY_DELAY_MS = { min: 6500, max: 9000 }; // 10-15s between categories
-const CYCLE_REST_MS = { min: 9000, max: 15000 };    // 30-45s rest between full cycles
-const BLOCKED_BACKOFF_MS = 600000;                       // 10 min backoff if blocked
+const CATEGORY_DELAY_MS = { min: 1600, max: 2600 }; // 1.6-2.3s between categories
+const CYCLE_REST_MS = { min: 1600, max: 3500 };    // 1.4-2.3s rest between full cycles
+const BLOCKED_BACKOFF_MS = 600000;                 // 10 min backoff if blocked
 
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
@@ -84,21 +89,6 @@ const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/125.0.0.0 Safari/537.36",
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
 ];
-
-// ---------------------------------------------------------------------------
-// Shuffle categories based on worker ID (deterministic)
-// Each worker gets a different starting order so they scan different
-// categories at different times, maximizing overall throughput.
-// ---------------------------------------------------------------------------
-function shuffleCategories(keys: string[], workerId: number): string[] {
-  const shuffled = [...keys];
-  // Rotate the array by (workerId - 1) * floor(length / 3) positions
-  // Worker 1: starts at position 0 (stanovi, kuce, ...)
-  // Worker 2: starts at position 3 (poslovni_prostori, vikendice, ...)
-  // Worker 3: starts at position 6 (novogradnja, najam_stanova, ...)
-  const offset = ((workerId - 1) * Math.floor(shuffled.length / 3)) % shuffled.length;
-  return [...shuffled.slice(offset), ...shuffled.slice(0, offset)];
-}
 
 // Helper to log to both console and Supabase
 async function dbLog(message: string, level: "info" | "success" | "warning" | "error" = "info") {
@@ -133,13 +123,12 @@ async function runMonitor() {
   await dbLog("╔══════════════════════════════════════════════════╗", "success");
   await dbLog(`║  Njuškalo Monitor — Worker ${WORKER_ID} Starting Up       ║`, "success");
   await dbLog("╚══════════════════════════════════════════════════╝", "success");
-  await dbLog(`Monitoring ${Object.keys(CATEGORIES).length} categories.`, "info");
-  await dbLog(`Mode: TEST (Saving ONLY Private ads)`, "warning");
+  // Get categories for this worker (fallback to all if not defined)
+  const categoryKeys = WORKER_CATEGORIES[WORKER_ID] || Object.keys(CATEGORIES);
+  await dbLog(`Monitoring ${categoryKeys.length} categories (Worker ${WORKER_ID}).`, "info");
+  await dbLog(`Mode: Private ads only (agency ads tracked in seen_listings)`, "info");
   await dbLog(`Category delay: ${CATEGORY_DELAY_MS.min / 1000}-${CATEGORY_DELAY_MS.max / 1000}s`, "info");
   await dbLog(`Cycle rest: ${CYCLE_REST_MS.min / 1000}-${CYCLE_REST_MS.max / 1000}s`, "info");
-
-  // Prepare shuffled category order for this worker
-  const categoryKeys = shuffleCategories(Object.keys(CATEGORIES), WORKER_ID);
   await dbLog(`Category order: ${categoryKeys.join(" → ")}`, "info");
   await dbLog("", "info");
 
@@ -216,21 +205,41 @@ async function runMonitor() {
     await dbLog(`Cycle #${totalCycles} starting — ${new Date().toLocaleString("hr-HR")} (Uptime: ${formatUptime()})`, "info");
     await dbLog(`${"═".repeat(60)}`, "info");
 
-    // Pre-fetch all known external_ids from the database once per cycle
-    const { data: existingData, error: existingError } = await supabase
-      .from("listings")
-      .select("external_id");
+    // Pre-fetch all known external_ids from both listings and seen_listings
+    // Supabase default limit is 1000 rows — we need ALL rows for dedup
+    const fetchAllExternalIds = async (table: string): Promise<string[]> => {
+      const ids: string[] = [];
+      const PAGE_SIZE = 1000;
+      let offset = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from(table)
+          .select("external_id")
+          .range(offset, offset + PAGE_SIZE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        ids.push(...data.map((row: any) => row.external_id));
+        if (data.length < PAGE_SIZE) break;
+        offset += PAGE_SIZE;
+      }
+      return ids;
+    };
 
-    if (existingError) {
-      await dbLog(`Failed to fetch existing listings: ${existingError.message}`, "error");
+    let listingIds: string[] = [];
+    let seenIds: string[] = [];
+    try {
+      [listingIds, seenIds] = await Promise.all([
+        fetchAllExternalIds("listings"),
+        fetchAllExternalIds("seen_listings"),
+      ]);
+    } catch (err: any) {
+      await dbLog(`Failed to fetch known IDs: ${err.message}`, "error");
       await randomDelay(30000, 60000);
       continue;
     }
 
-    const knownIds = new Set<string>(
-      (existingData || []).map((row: any) => row.external_id)
-    );
-    await dbLog(`Database has ${knownIds.size} known listings.`, "info");
+    const knownIds = new Set<string>([...listingIds, ...seenIds]);
+    await dbLog(`Database has ${knownIds.size} known listings (${listingIds.length} full, ${seenIds.length} seen).`, "info");
 
     // Cycle through all categories (in shuffled order for this worker)
     for (let i = 0; i < categoryKeys.length; i++) {
@@ -288,14 +297,23 @@ async function runMonitor() {
         if (newListings.length === 0) {
           await dbLog(`[${category}] All ${result.listings.length} listings already known.`, "info");
         } else {
-          await dbLog(`[${category}] 🆕 ${newListings.length} NEW ads detected on page 1! Checking details...`, "info");
+          // Dedupe newListings by external_id (in case same ad appears multiple times on page)
+          const seenInBatch = new Set<string>();
+          const uniqueNewListings = newListings.filter((l) => {
+            if (seenInBatch.has(l.external_id)) return false;
+            seenInBatch.add(l.external_id);
+            return true;
+          });
+
+          await dbLog(`[${category}] 🆕 ${uniqueNewListings.length} NEW ads detected on page 1! Checking details...`, "info");
 
           // Extract cookies from the Playwright session for fast HTTP fetches
           const cookies = await context.cookies();
           const privateListingsToSave = [];
+          const seenListingsToSave = [];
 
           // Fetch detail pages for each new ad using fast HTTP
-          for (const listing of newListings) {
+          for (const listing of uniqueNewListings) {
             if (!listing.url) continue;
 
             try {
@@ -337,6 +355,12 @@ async function runMonitor() {
                   "success"
                 );
               } else {
+                // Save agency/non-private ads to seen_listings for skip tracking
+                seenListingsToSave.push({
+                  external_id: listing.external_id,
+                  advertiser_type: listing.advertiser_type || "Agencija",
+                  worker_id: WORKER_ID,
+                });
                 await dbLog(
                   `[${category}]    Agency  | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
                   "info"
@@ -344,14 +368,13 @@ async function runMonitor() {
               }
             } catch (err) {
               await dbLog(`[${category}] Failed to fetch detail for ${listing.external_id}: ${(err as Error).message}`, "warning");
-              // We won't save it if we can't fetch detail to confirm it's private
             }
 
             // Mark this ID as known so we don't re-process it in subsequent categories
             knownIds.add(listing.external_id);
           }
 
-          // Save ONLY private listings to Supabase
+          // Save ONLY private listings to the main listings table
           if (privateListingsToSave.length > 0) {
             const { error: insertError } = await (supabase as any)
               .from("listings")
@@ -363,8 +386,23 @@ async function runMonitor() {
               await dbLog(`[${category}] ✅ Saved ${privateListingsToSave.length} PRIVATE listings to database.`, "success");
               cycleNewAds += privateListingsToSave.length;
             }
-          } else {
-            await dbLog(`[${category}] No private ads found in this batch.`, "info");
+          }
+
+          // Save agency ads to seen_listings for skip tracking
+          if (seenListingsToSave.length > 0) {
+            const { error: seenError } = await (supabase as any)
+              .from("seen_listings")
+              .upsert(seenListingsToSave, { onConflict: "external_id", ignoreDuplicates: true });
+
+            if (seenError) {
+              await dbLog(`[${category}] Error saving seen listings: ${seenError.message}`, "error");
+            } else {
+              await dbLog(`[${category}] 📝 Tracked ${seenListingsToSave.length} agency ads in seen_listings.`, "info");
+            }
+          }
+
+          if (privateListingsToSave.length === 0 && seenListingsToSave.length === 0) {
+            await dbLog(`[${category}] No ads to save (all detail fetches failed).`, "warning");
           }
         }
       }
@@ -407,7 +445,14 @@ async function runMonitor() {
 
     // Rest between full cycles
     if (!shuttingDown) {
-      const rest = CYCLE_REST_MS.min + Math.floor(Math.random() * (CYCLE_REST_MS.max - CYCLE_REST_MS.min));
+      let rest = CYCLE_REST_MS.min + Math.floor(Math.random() * (CYCLE_REST_MS.max - CYCLE_REST_MS.min));
+
+      if (cycleDuration < 60) {
+        const extraWait = (60 - cycleDuration) * 1000;
+        rest += extraWait;
+        await dbLog(`Low traffic detected (cycle took ${cycleDuration}s). Enforcing 60s minimum cycle duration. Adding ${extraWait / 1000}s penalty wait.`, "warning");
+      }
+
       await dbLog(`Resting ${Math.round(rest / 1000)}s before next cycle...\n`, "info");
       await new Promise((resolve) => setTimeout(resolve, rest));
     }

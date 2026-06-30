@@ -1,5 +1,97 @@
 # Development Log
 
+## [2026-07-01] Monitor Stats Dashboard, Worker Fixes & Category Expansion
+- **Goal**: Complete Njuškalo category coverage, balance 2-worker load by traffic volume, fix incorrect stats, and improve bot-protection resilience during low-traffic periods.
+
+### 1. Missing Categories Added (10 → 17)
+- **File**: `src/lib/scraper/njuskalo.ts`
+- Added 7 categories: `luksuzne_kuce`, `luksuzni_stanovi`, `najam_garaza`, `najam_zemljista`, `najam_luksuznih_kuca`, `najam_luksuznih_stanova`
+- Added property type mappings in `parseListingsFromHTML()` for each new category key
+
+### 2. Category URL Corrections
+Three paths were wrong (ShieldSquare CAPTCHA or empty pages):
+| Key | Wrong | Correct |
+|-----|-------|---------|
+| `luksuzne_kuce` | `/luksuzne-kuce` | `/prodaja-luksuznih-kuca` |
+| `luksuzni_stanovi` | `/luksuzni-stanovi` | `/prodaja-luksuznih-stanova` |
+| `najam_zemljista` | `/iznajmljivanje-zemljista` | `/zakup-zemljista` |
+
+### 3. Weighted 2-Worker Load Balancing
+- **File**: `src/lib/scraper/njuskalo.ts` — new `WORKER_CATEGORIES` export
+- **File**: `scripts/monitor.ts` — removed `shuffleCategories()`, now uses `WORKER_CATEGORIES[WORKER_ID]`
+- **Strategy**: Worker 1 = high-traffic sprint (fewer categories, faster cycles); Worker 2 = full coverage (all remaining categories)
+- **Current split** (user-tuned):
+  - W1: `kuce`, `zemljista`, `najam_stanova`, `najam_kuca`, `vikendice` (5 cats)
+  - W2: `stanovi`, `poslovni_prostori`, `luksuzne_kuce`, `luksuzni_stanovi`, `garaze`, `novogradnja`, `najam_garaza`, `najam_zemljista`, `najam_poslovnih_prostora`, `najam_luksuznih_kuca`, `najam_luksuznih_stanova` (11 cats)
+- **Note**: `stanovi` (60k ads) is only on W2 — consider moving to W1 or both workers for faster detection
+
+### 4. Worker Count 3 → 2
+- **Backend**: `src/app/api/monitor/control/route.ts` — `DEFAULT_WORKER_COUNT = 2`
+- **Frontend**: `src/components/MonitorDashboard.tsx` — hardcoded `workers: 3` in start request was overriding server default; fixed to `workers: 2`
+
+### 5. seen_listings 1,000 Row Limit Bug
+- **Problem**: Log showed exactly `1000 seen` — Supabase default row limit truncated dedup set
+- **Impact**: Ads beyond row 1,000 were re-fetched every cycle (wasted detail-page HTTP calls)
+- **Fix** (`scripts/monitor.ts`): Added `fetchAllExternalIds()` with paginated `.range()` in 1,000-row chunks for both `listings` and `seen_listings`
+
+### 6. Worker 1 Console Freeze (QuickEdit)
+- **Problem**: Worker 1 sometimes opened in CMD/Node window and stopped scanning; title bar showed `Select cmd.exe`
+- **Cause**: Windows console QuickEdit mode — clicking inside pauses the process until a key is pressed; `console.log` then blocks Node event loop
+- **Fix** (`src/app/api/monitor/control/route.ts`):
+  - `windowsHide: true` — no visible console window
+  - stdout/stderr redirected to `logs/worker-N.log`
+  - Added `/logs` and `*.pid` to `.gitignore`
+
+### 7. Minimum Cycle Duration (Bot Protection)
+- **Problem**: At night with few new ads, cycles completed in ~20s → ~30 page loads/min from one IP → ShieldSquare blocks
+- **Fix** (`scripts/monitor.ts`): If cycle duration < 60s, add penalty wait to enforce 60s minimum cycle time
+```typescript
+if (cycleDuration < 60) {
+  const extraWait = (60 - cycleDuration) * 1000;
+  rest += extraWait;
+}
+```
+
+### 8. Latency Outlier Cap
+- **File**: `src/app/api/monitor/stats/route.ts`
+- Changed detection latency outlier cutoff from **10 min → 5 min** (`ms < 5 * 60 * 1000`)
+- Filters old backfill ads from first scan cycles out of avg/min/max
+
+### 9. Enhanced Stats Dashboard
+- **API** (`src/app/api/monitor/stats/route.ts`):
+  - `latency.recent[]` — last 15 listings with individual detection latency
+  - `cycles.categoryDetails{}` — per category: last scan time, last gap, last 5 gap measurements
+  - `workers{}` — per-worker cycle history, timing, inferred status (Skenira/Čeka/Neaktivan)
+- **UI** (`src/components/MonitorDashboard.tsx`):
+  - Latency card expandable (click "Detalji") — shows last 15 ads with latency
+  - Category frequency card expandable — shows last scan time + recent 5 gaps per category
+  - New worker stats row — W1/W2 cards with cycle durations, status, inter-category pauses
+
+### 10. Worker Stats Bug Fix (worker_id type mismatch)
+- **Problem**: "Od zadnjeg skena" showed ~6381s (~106 min) while workers were actively cycling
+- **Cause**: Strict `===` comparison on `worker_id` failed when Supabase returned numeric column as string in JSON
+- **Fix**: `Number(s.worker_id) === workerId` in stats route filters
+
+### Files Changed (Session Summary)
+| File | Changes |
+|------|---------|
+| `src/lib/scraper/njuskalo.ts` | +7 categories, `WORKER_CATEGORIES`, URL fixes, property types |
+| `scripts/monitor.ts` | `WORKER_CATEGORIES`, paginated ID fetch, 60s min cycle, delays tuned |
+| `src/app/api/monitor/control/route.ts` | 2 workers, hidden spawn, log files |
+| `src/app/api/monitor/stats/route.ts` | Extended stats, 5-min cap, worker/category details |
+| `src/components/MonitorDashboard.tsx` | 2 workers UI, expandable stats, worker cards |
+| `.gitignore` | `/logs`, `*.pid` |
+
+### Lessons Learned
+1. **Supabase default limit is 1000 rows** — always paginate when loading full tables for dedup
+2. **Windows QuickEdit freezes Node** — never spawn workers with visible console on Windows; use log files
+3. **Fast empty cycles trigger bot protection** — enforce minimum cycle duration when no new ads found
+4. **Frontend can override backend defaults** — check both API route AND dashboard for hardcoded values
+5. **`WORKER_CATEGORIES` must actually be used** — defining config without wiring it in monitor.ts caused identical scan frequencies for all categories
+6. **Supabase JSON may return numbers as strings** — use `Number()` when filtering by numeric columns
+
+---
+
 ## [2026-06-30] Multi-Worker Scraping Architecture & Latency Tracking
 - **Goal**: Maximize the Njuškalo scraping frequency without triggering ShieldSquare bot protection, and track the exact latency from the moment an ad is published until we scrape it.
 - **Bot Protection Insight**: Running 3 independent monitor scripts simultaneously from the same IP does *not* trigger bot protection. This works because ShieldSquare tracks rolling average request rates, and 3 desynchronized scripts with random delays create organic-looking, human-like traffic spikes rather than a robotic rhythm. 

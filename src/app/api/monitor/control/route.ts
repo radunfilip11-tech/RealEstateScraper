@@ -4,10 +4,14 @@ import * as fs from "fs";
 import * as path from "path";
 import { createClient } from "@supabase/supabase-js";
 
-const DEFAULT_WORKER_COUNT = 3;
+const DEFAULT_WORKER_COUNT = 2;
 
 function getPidFilePath(workerId: number): string {
   return path.resolve(process.cwd(), `monitor-${workerId}.pid`);
+}
+
+function getLogFilePath(workerId: number): string {
+  return path.resolve(process.cwd(), "logs", `worker-${workerId}.log`);
 }
 
 function getActiveWorkerIds(): number[] {
@@ -36,16 +40,31 @@ export async function POST(req: Request) {
 
       const workerCount = workers || DEFAULT_WORKER_COUNT;
 
-      // Spawn N separate worker processes
+      // Ensure logs directory exists
+      const logsDir = path.resolve(process.cwd(), "logs");
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+      }
+
+      // Spawn N separate worker processes.
+      // Output is redirected to per-worker log files and the console window is
+      // hidden (windowsHide). This prevents the Windows console "QuickEdit"
+      // selection mode from freezing a worker when its window is clicked, which
+      // previously caused worker 1 to get stuck mid-cycle. Live logs remain
+      // visible in the dashboard (Supabase) and tail-able from logs/worker-N.log.
       for (let i = 1; i <= workerCount; i++) {
+        const out = fs.openSync(getLogFilePath(i), "a");
+        const err = fs.openSync(getLogFilePath(i), "a");
+
         const child = spawn(
           "npm",
           ["run", "monitor", "--", "--worker-id", String(i)],
           {
             detached: true,
-            stdio: "ignore",
+            stdio: ["ignore", out, err],
             cwd: process.cwd(),
             shell: process.platform === "win32",
+            windowsHide: true,
           }
         );
 

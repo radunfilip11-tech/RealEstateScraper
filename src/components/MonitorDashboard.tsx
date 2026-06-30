@@ -13,9 +13,45 @@ interface LogEntry {
 }
 
 interface StatsData {
-  latency: { avgMs: number; minMs: number; maxMs: number };
+  latency: {
+    avgMs: number;
+    minMs: number;
+    maxMs: number;
+    recent: { id: string; title: string; latencyMs: number; createdAt: string }[];
+  };
   ads: { total24h: number };
-  cycles: { total24h: number; avgDurationS: number; avgTimeBetweenScansMs: number; avgCategoryScanGapMs: number; categoryGapsMs: Record<string, number> };
+  cycles: {
+    total24h: number;
+    avgDurationS: number;
+    avgTimeBetweenScansMs: number;
+    avgCategoryScanGapMs: number;
+    categoryGapsMs: Record<string, number>;
+    categoryDetails: Record<
+      string,
+      {
+        avgGapMs: number;
+        lastGapMs: number | null;
+        lastScannedAt: string | null;
+        recentGapsMs: number[];
+      }
+    >;
+  };
+  workers: Record<
+    number,
+    {
+      lastCycleDurationS: number | null;
+      lastCycleStartedAt: string | null;
+      lastCycleEndedAt: string | null;
+      secondsSinceCycleEnd: number | null;
+      secondsSinceCategoryScan: number | null;
+      lastCategory: string | null;
+      lastCategoryScanAt: string | null;
+      avgCycleDurationS: number;
+      recentCycles: { durationS: number; startedAt: string; newListings: number }[];
+      recentCategoryGapsMs: number[];
+      status: "scanning" | "resting" | "idle";
+    }
+  >;
 }
 
 function formatDuration(ms: number): string {
@@ -26,6 +62,23 @@ function formatDuration(ms: number): string {
   return `${s}s`;
 }
 
+function formatTime(iso: string | null): string {
+  if (!iso) return "--";
+  return new Date(iso).toLocaleTimeString("hr-HR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function workerStatusLabel(status: "scanning" | "resting" | "idle"): string {
+  if (status === "scanning") return "Skenira";
+  if (status === "resting") return "Čeka";
+  return "Neaktivan";
+}
+
+function workerStatusColor(status: "scanning" | "resting" | "idle"): string {
+  if (status === "scanning") return "text-emerald-400 bg-emerald-400/10";
+  if (status === "resting") return "text-amber-400 bg-amber-400/10";
+  return "text-slate-400 bg-slate-400/10";
+}
+
 export default function MonitorDashboard() {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [workerCount, setWorkerCount] = useState<number>(0);
@@ -34,6 +87,7 @@ export default function MonitorDashboard() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [showCatDetails, setShowCatDetails] = useState(false);
+  const [showLatencyDetails, setShowLatencyDetails] = useState(false);
   
   const logsEndRef = useRef<HTMLDivElement>(null);
   const supabase = getSupabaseBrowserClient();
@@ -122,7 +176,7 @@ export default function MonitorDashboard() {
 
   const handleStart = async () => {
     setIsProcessing(true);
-    await fetch("/api/monitor/control", { method: "POST", body: JSON.stringify({ action: "start", workers: 3 }) });
+    await fetch("/api/monitor/control", { method: "POST", body: JSON.stringify({ action: "start", workers: 2 }) });
     setTimeout(checkStatus, 2000);
     setIsProcessing(false);
   };
@@ -184,7 +238,7 @@ export default function MonitorDashboard() {
               disabled={isProcessing}
               className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
             >
-              Start Scraper (3 Workers)
+              Start Scraper (2 Workers)
             </button>
           )}
           
@@ -199,13 +253,38 @@ export default function MonitorDashboard() {
       </div>
 
       {/* Stats Panel */}
-      <div className="grid grid-cols-5 gap-4 mb-6">
-        <div className="bg-[#0f172a] text-white p-4 rounded-xl shadow-sm border border-slate-700">
-          <div className="text-slate-400 text-xs font-medium mb-1">Prosječno kašnjenje</div>
-          <div className="text-2xl font-bold text-emerald-400">
-            {formatDuration(stats?.latency?.avgMs || 0)}
+      <div className="grid grid-cols-5 gap-4 mb-4">
+        <div
+          className="bg-[#0f172a] text-white p-4 rounded-xl shadow-sm border border-slate-700 cursor-pointer hover:bg-slate-800 transition-colors"
+          onClick={() => setShowLatencyDetails(!showLatencyDetails)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="text-slate-400 text-xs font-medium mb-1">Prosječno kašnjenje</div>
+            <span className="text-[10px] text-slate-500">{showLatencyDetails ? "Prikaži manje" : "Detalji"}</span>
           </div>
-          <div className="text-[10px] text-slate-500 mt-1">od objave do naše baze</div>
+          {!showLatencyDetails ? (
+            <>
+              <div className="text-2xl font-bold text-emerald-400">
+                {formatDuration(stats?.latency?.avgMs || 0)}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">od objave do naše baze</div>
+            </>
+          ) : (
+            <div className="mt-2 space-y-1 max-h-28 overflow-y-auto pr-1 custom-scrollbar">
+              {stats?.latency?.recent?.length ? (
+                stats.latency.recent.map((item) => (
+                  <div key={item.id} className="flex justify-between gap-2 text-xs border-b border-slate-700/50 pb-0.5">
+                    <span className="text-slate-300 truncate flex-1" title={item.title}>
+                      {item.title.substring(0, 28)}{item.title.length > 28 ? "…" : ""}
+                    </span>
+                    <span className="text-emerald-300 font-mono shrink-0">{formatDuration(item.latencyMs)}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-slate-500">Nema podataka (zadnjih 15)</div>
+              )}
+            </div>
+          )}
         </div>
         <div 
           className="bg-[#0f172a] text-white p-4 rounded-xl shadow-sm border border-slate-700 cursor-pointer hover:bg-slate-800 transition-colors relative"
@@ -223,12 +302,25 @@ export default function MonitorDashboard() {
               <div className="text-[10px] text-slate-500 mt-1">prosjek za sve</div>
             </>
           ) : (
-            <div className="mt-2 space-y-1 max-h-16 overflow-y-auto pr-1 custom-scrollbar">
-              {stats?.cycles?.categoryGapsMs ? (
-                Object.entries(stats.cycles.categoryGapsMs).map(([cat, gapMs]) => (
-                  <div key={cat} className="flex justify-between text-xs border-b border-slate-700/50 pb-0.5">
-                    <span className="text-slate-300 capitalize">{cat.replace(/_/g, " ")}</span>
-                    <span className="text-blue-300 font-mono">{formatDuration(gapMs)}</span>
+            <div className="mt-2 space-y-1.5 max-h-28 overflow-y-auto pr-1 custom-scrollbar">
+              {stats?.cycles?.categoryDetails ? (
+                Object.entries(stats.cycles.categoryDetails).map(([cat, detail]) => (
+                  <div key={cat} className="text-xs border-b border-slate-700/50 pb-1">
+                    <div className="flex justify-between">
+                      <span className="text-slate-300 capitalize">{cat.replace(/_/g, " ")}</span>
+                      <span className="text-blue-300 font-mono">{formatDuration(detail.avgGapMs)}</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-500 mt-0.5">
+                      <span>Zadnji: {formatTime(detail.lastScannedAt)}</span>
+                      <span>
+                        {detail.lastGapMs ? formatDuration(detail.lastGapMs) : "--"}
+                        {detail.recentGapsMs.length > 0 && (
+                          <span className="text-slate-600 ml-1">
+                            [{detail.recentGapsMs.map((g) => `${Math.round(g / 1000)}s`).join(", ")}]
+                          </span>
+                        )}
+                      </span>
+                    </div>
                   </div>
                 ))
               ) : (
@@ -258,6 +350,74 @@ export default function MonitorDashboard() {
           </div>
           <div className="text-[10px] text-slate-500 mt-1">min i max latencija</div>
         </div>
+      </div>
+
+      {/* Worker Stats Row */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        {[1, 2].map((workerId) => {
+          const w = stats?.workers?.[workerId];
+          return (
+            <div key={workerId} className="bg-[#0f172a] text-white p-4 rounded-xl shadow-sm border border-slate-700">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-slate-400 text-xs font-medium">Worker {workerId}</div>
+                {w && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${workerStatusColor(w.status)}`}>
+                    {workerStatusLabel(w.status)}
+                    {w.lastCategory && w.status === "scanning" ? ` · ${w.lastCategory.replace(/_/g, " ")}` : ""}
+                  </span>
+                )}
+              </div>
+              {!w ? (
+                <div className="text-xs text-slate-500">Nema podataka</div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-3 gap-3 mb-2">
+                    <div>
+                      <div className="text-[10px] text-slate-500">Zadnji ciklus</div>
+                      <div className="text-sm font-bold text-indigo-300">
+                        {w.lastCycleDurationS != null ? `${w.lastCycleDurationS}s` : "--"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500">Prosjek (10)</div>
+                      <div className="text-sm font-bold text-indigo-300">
+                        {w.avgCycleDurationS > 0 ? `${w.avgCycleDurationS}s` : "--"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500">Od zadnjeg skena</div>
+                      <div className="text-sm font-bold text-amber-300">
+                        {w.secondsSinceCategoryScan != null ? `${w.secondsSinceCategoryScan}s` : "--"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mb-1">
+                    Zadnji ciklus: {formatTime(w.lastCycleEndedAt)} · Kategorija: {formatTime(w.lastCategoryScanAt)}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {w.recentCycles.slice(0, 10).map((c, i) => (
+                      <span
+                        key={i}
+                        className="text-[10px] font-mono bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded"
+                        title={`${formatTime(c.startedAt)} · ${c.newListings} novih`}
+                      >
+                        {c.durationS}s
+                      </span>
+                    ))}
+                  </div>
+                  {w.recentCategoryGapsMs.length > 0 && (
+                    <div className="text-[10px] text-slate-500 mt-1.5">
+                      Pauze između kategorija:{" "}
+                      <span className="text-slate-400 font-mono">
+                        {w.recentCategoryGapsMs.map((g) => `${Math.round(g / 1000)}s`).join(" · ")}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Split Screen */}
@@ -293,7 +453,7 @@ export default function MonitorDashboard() {
             </div>
             {workerCount > 0 && (
               <div className="text-xs font-mono text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded">
-                Workers: W1, W2, W3
+                Workers: W1, W2
               </div>
             )}
           </div>

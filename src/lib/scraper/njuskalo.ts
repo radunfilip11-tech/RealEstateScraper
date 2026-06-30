@@ -10,6 +10,7 @@ interface ScrapeOptions {
 export const NJUSKALO_BASE = "https://www.njuskalo.hr";
 
 export const CATEGORIES: Record<string, string> = {
+  // Sale categories
   stanovi: "/prodaja-stanova",
   kuce: "/prodaja-kuca",
   zemljista: "/prodaja-zemljista",
@@ -17,9 +18,31 @@ export const CATEGORIES: Record<string, string> = {
   vikendice: "/vikendice",
   garaze: "/prodaja-garaza",
   novogradnja: "/novogradnja",
+  luksuzne_kuce: "/prodaja-luksuznih-kuca",
+  luksuzni_stanovi: "/prodaja-luksuznih-stanova",
+  // Rent categories
   najam_stanova: "/iznajmljivanje-stanova",
   najam_kuca: "/iznajmljivanje-kuca",
   najam_poslovnih_prostora: "/iznajmljivanje-poslovnih-prostora",
+  najam_garaza: "/iznajmljivanje-garaza",
+  najam_zemljista: "/zakup-zemljista",
+  najam_luksuznih_kuca: "/iznajmljivanje-luksuznih-kuca",
+  najam_luksuznih_stanova: "/iznajmljivanje-luksuznih-stanova",
+};
+
+export const WORKER_CATEGORIES: Record<number, string[]> = {
+  // Worker 1: High-traffic sprint — only 6 categories, ~1min cycle
+  1: [
+    "kuce", "zemljista", "najam_stanova", "najam_kuca", "vikendice",
+  ],
+  // Worker 2: Full coverage — 10 categories, ~4-5min cycle
+  // High-traffic categories interleaved for even spacing
+  2: [
+    "stanovi", "poslovni_prostori", "luksuzne_kuce",
+    "luksuzni_stanovi", "garaze","novogradnja", "najam_garaza", 
+    "najam_zemljista", "najam_poslovnih_prostora",
+    "najam_luksuznih_kuca", "najam_luksuznih_stanova",
+  ],
 };
 
 /**
@@ -314,9 +337,15 @@ export function parseListingsFromHTML(
       else if (category === "vikendice") propertyType = "Vikendica";
       else if (category === "garaze") propertyType = "Garaža";
       else if (category === "novogradnja") propertyType = "Novogradnja";
+      else if (category === "luksuzne_kuce") propertyType = "Luksuzna kuća";
+      else if (category === "luksuzni_stanovi") propertyType = "Luksuzni stan";
       else if (category === "najam_stanova") { propertyType = "Stan"; transactionType = "Najam"; }
       else if (category === "najam_kuca") { propertyType = "Kuća"; transactionType = "Najam"; }
       else if (category === "najam_poslovnih_prostora") { propertyType = "Poslovni prostor"; transactionType = "Najam"; }
+      else if (category === "najam_garaza") { propertyType = "Garaža"; transactionType = "Najam"; }
+      else if (category === "najam_zemljista") { propertyType = "Zemljište"; transactionType = "Najam"; }
+      else if (category === "najam_luksuznih_kuca") { propertyType = "Luksuzna kuća"; transactionType = "Najam"; }
+      else if (category === "najam_luksuznih_stanova") { propertyType = "Luksuzni stan"; transactionType = "Najam"; }
 
       // --- Advertiser type ---
       let advertiserType: string | null = null;

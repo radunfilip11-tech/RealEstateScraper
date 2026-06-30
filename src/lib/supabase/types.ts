@@ -46,6 +46,13 @@ export interface Buyer {
   created_at: string;
 }
 
+export interface SeenListing {
+  external_id: string;
+  advertiser_type: string | null;
+  seen_at: string;
+  worker_id: number | null;
+}
+
 // Insert types (without auto-generated fields)
 export type ListingInsert = Omit<Listing, "id" | "created_at" | "notified"> & {
   notified?: boolean;
