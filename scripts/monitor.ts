@@ -53,8 +53,8 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const CATEGORY_DELAY_MS = { min: 40000, max: 70000 }; // 40-70s between categories
-const CYCLE_REST_MS = { min: 180000, max: 300000 };    // 3-5 min rest between full cycles
+const CATEGORY_DELAY_MS = { min: 20000, max: 30000 }; // 20-30s between categories
+const CYCLE_REST_MS = { min: 60000, max: 90000 };    // 1-1.5 min rest between full cycles
 const BLOCKED_BACKOFF_MS = 600000;                       // 10 min backoff if blocked
 
 const USER_AGENTS = [
@@ -280,6 +280,11 @@ async function runMonitor() {
               }
               if (detail.advertiserType) {
                 listing.advertiser_type = detail.advertiserType;
+              }
+              // Promoted & published date from detail page
+              listing.is_promoted = detail.isPromoted;
+              if (detail.publishedAt) {
+                listing.published_at = detail.publishedAt;
               }
 
               const isPrivate = listing.advertiser_type === "Privatni";

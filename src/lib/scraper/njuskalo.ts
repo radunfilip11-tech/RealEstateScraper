@@ -103,6 +103,8 @@ export function parseDetailPageHTML(html: string): {
   locationNeighborhood: string | null;
   sizeM2: number | null;
   advertiserType: string | null;
+  isPromoted: boolean;
+  publishedAt: string | null;
 } {
   let price: string | null = null;
   let priceNumeric: number | null = null;
@@ -170,7 +172,17 @@ export function parseDetailPageHTML(html: string): {
     advertiserType = "Privatni";
   }
 
-  return { price, priceNumeric, location, locationCounty, locationCity, locationNeighborhood, sizeM2, advertiserType };
+  // --- Promoted (detail page contains "oglas je istaknut" or "istaknut" badge) ---
+  const isPromoted = /istaknut/i.test(stripHtml(html)) || /VauVau/i.test(html) || /SuperVau/i.test(html);
+
+  // --- Published at (detail page has <time datetime="..."> element) ---
+  let publishedAt: string | null = null;
+  const pubMatch = html.match(/<time[^>]*datetime="([^"]+)"/i);
+  if (pubMatch) {
+    publishedAt = pubMatch[1];
+  }
+
+  return { price, priceNumeric, location, locationCounty, locationCity, locationNeighborhood, sizeM2, advertiserType, isPromoted, publishedAt };
 }
 
 /**
@@ -312,6 +324,17 @@ export function parseListingsFromHTML(
         advertiserType = "Privatni";
       }
 
+      // --- Promoted ---
+      const strippedItem = stripHtml(item);
+      const isPromoted = /istaknut/i.test(strippedItem) || /VauVau/i.test(item) || /SuperVau/i.test(item);
+
+      // --- Published at ---
+      let publishedAt: string | undefined = undefined;
+      const pubMatch = item.match(/<time[^>]*datetime="([^"]+)"/i);
+      if (pubMatch) {
+        publishedAt = pubMatch[1];
+      }
+
       // Debug: log raw HTML for listings missing price or location so we can fix regexes
       if (process.env.DEBUG_MISSING_FIELDS && (!price || !location)) {
         console.warn(
@@ -340,6 +363,8 @@ export function parseListingsFromHTML(
         description,
         status: "Novi",
         hidden: false,
+        is_promoted: isPromoted,
+        published_at: publishedAt,
       });
     } catch (e) {
       console.error("[Scraper] Error parsing listing:", e);

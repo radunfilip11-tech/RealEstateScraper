@@ -22,6 +22,8 @@ export interface Listing {
   notified: boolean;
   status: string;
   hidden: boolean;
+  is_promoted?: boolean;
+  published_at?: string;
   created_at: string;
 }
 
