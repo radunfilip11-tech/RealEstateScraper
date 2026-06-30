@@ -5,7 +5,7 @@
  * categories, detecting new ads and checking if they are private
  * ("Korisnik nije trgovac") via fast HTTP fetch of detail pages.
  * 
- * Usage: npm run monitor
+ * Usage: npm run monitor -- --worker-id 1
  * 
  * Architecture:
  *   1. A single Playwright browser stays alive across all cycles.
@@ -15,6 +15,11 @@
  *      to instantly load the detail page and check for "Korisnik nije trgovac".
  *   5. New ads are saved to Supabase. Private ones are flagged.
  *   6. After all categories, we rest and repeat.
+ * 
+ * Multi-Worker Mode:
+ *   Each worker gets a unique ID (1, 2, 3). Categories are shuffled based on
+ *   the worker ID so that workers scan different categories at different times,
+ *   maximizing coverage and reducing duplicate work.
  */
 
 import {
@@ -37,14 +42,30 @@ import * as fs from "fs";
 // Load environment variables from .env.local
 dotenv.config({ path: path.resolve(__dirname, "../.env.local") });
 
-// Define PID file path
-const PID_FILE = path.resolve(__dirname, "../monitor.pid");
+// ---------------------------------------------------------------------------
+// Parse CLI arguments for worker ID
+// ---------------------------------------------------------------------------
+function parseWorkerId(): number {
+  const args = process.argv.slice(2);
+  const idx = args.indexOf("--worker-id");
+  if (idx !== -1 && args[idx + 1]) {
+    const id = parseInt(args[idx + 1], 10);
+    if (!isNaN(id) && id > 0) return id;
+  }
+  return 1; // Default to worker 1
+}
+
+const WORKER_ID = parseWorkerId();
+const WORKER_TAG = `[W${WORKER_ID}]`;
+
+// Define PID file path (per-worker)
+const PID_FILE = path.resolve(__dirname, `../monitor-${WORKER_ID}.pid`);
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  console.error("[Monitor] Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
+  console.error(`${WORKER_TAG} Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local`);
   process.exit(1);
 }
 
@@ -64,10 +85,26 @@ const USER_AGENTS = [
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
 ];
 
+// ---------------------------------------------------------------------------
+// Shuffle categories based on worker ID (deterministic)
+// Each worker gets a different starting order so they scan different
+// categories at different times, maximizing overall throughput.
+// ---------------------------------------------------------------------------
+function shuffleCategories(keys: string[], workerId: number): string[] {
+  const shuffled = [...keys];
+  // Rotate the array by (workerId - 1) * floor(length / 3) positions
+  // Worker 1: starts at position 0 (stanovi, kuce, ...)
+  // Worker 2: starts at position 3 (poslovni_prostori, vikendice, ...)
+  // Worker 3: starts at position 6 (novogradnja, najam_stanova, ...)
+  const offset = ((workerId - 1) * Math.floor(shuffled.length / 3)) % shuffled.length;
+  return [...shuffled.slice(offset), ...shuffled.slice(0, offset)];
+}
+
 // Helper to log to both console and Supabase
 async function dbLog(message: string, level: "info" | "success" | "warning" | "error" = "info") {
-  console.log(message);
-  await (supabase as any).from("scraper_console_logs").insert({ message, level });
+  const taggedMessage = `${WORKER_TAG} ${message}`;
+  console.log(taggedMessage);
+  await (supabase as any).from("scraper_console_logs").insert({ message: taggedMessage, level });
 }
 
 
@@ -94,12 +131,16 @@ async function runMonitor() {
   fs.writeFileSync(PID_FILE, process.pid.toString(), "utf-8");
 
   await dbLog("╔══════════════════════════════════════════════════╗", "success");
-  await dbLog("║  Njuškalo Real Estate Monitor — Starting Up     ║", "success");
+  await dbLog(`║  Njuškalo Monitor — Worker ${WORKER_ID} Starting Up       ║`, "success");
   await dbLog("╚══════════════════════════════════════════════════╝", "success");
-  await dbLog(`[Monitor] Monitoring ${Object.keys(CATEGORIES).length} categories.`, "info");
-  await dbLog(`[Monitor] Mode: TEST (Saving ONLY Private ads)`, "warning");
-  await dbLog(`[Monitor] Category delay: ${CATEGORY_DELAY_MS.min / 1000}-${CATEGORY_DELAY_MS.max / 1000}s`, "info");
-  await dbLog(`[Monitor] Cycle rest: ${CYCLE_REST_MS.min / 1000}-${CYCLE_REST_MS.max / 1000}s`, "info");
+  await dbLog(`Monitoring ${Object.keys(CATEGORIES).length} categories.`, "info");
+  await dbLog(`Mode: TEST (Saving ONLY Private ads)`, "warning");
+  await dbLog(`Category delay: ${CATEGORY_DELAY_MS.min / 1000}-${CATEGORY_DELAY_MS.max / 1000}s`, "info");
+  await dbLog(`Cycle rest: ${CYCLE_REST_MS.min / 1000}-${CYCLE_REST_MS.max / 1000}s`, "info");
+
+  // Prepare shuffled category order for this worker
+  const categoryKeys = shuffleCategories(Object.keys(CATEGORIES), WORKER_ID);
+  await dbLog(`Category order: ${categoryKeys.join(" → ")}`, "info");
   await dbLog("", "info");
 
   // Launch Playwright with stealth (stays alive across all cycles)
@@ -132,7 +173,7 @@ async function runMonitor() {
 
   let page = await context.newPage();
 
-  await dbLog(`[Monitor] Browser launched. User-Agent: ${userAgent.substring(0, 50)}...`, "info");
+  await dbLog(`Browser launched. User-Agent: ${userAgent.substring(0, 50)}...`, "info");
   await dbLog("", "info");
 
   // Graceful shutdown
@@ -140,10 +181,10 @@ async function runMonitor() {
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
-    await dbLog("\n[Monitor] Shutting down gracefully...", "warning");
+    await dbLog("Shutting down gracefully...", "warning");
     try { await context.close(); } catch { /* ignore */ }
     try { await browser.close(); } catch { /* ignore */ }
-    await dbLog(`[Monitor] Final stats: ${totalCycles} cycles, ${totalNewAds} new ads found, ${totalPrivateAds} private ads. Uptime: ${formatUptime()}`, "success");
+    await dbLog(`Final stats: ${totalCycles} cycles, ${totalNewAds} new ads found, ${totalPrivateAds} private ads. Uptime: ${formatUptime()}`, "success");
     
     // Remove PID file
     if (fs.existsSync(PID_FILE)) {
@@ -160,7 +201,7 @@ async function runMonitor() {
   while (!shuttingDown) {
     // Check if PID file was deleted by the UI
     if (!fs.existsSync(PID_FILE)) {
-      await dbLog("[Monitor] PID file missing. UI requested shutdown.", "warning");
+      await dbLog("PID file missing. UI requested shutdown.", "warning");
       await shutdown();
       break;
     }
@@ -172,7 +213,7 @@ async function runMonitor() {
     let blocked = false;
 
     await dbLog(`\n${"═".repeat(60)}`, "info");
-    await dbLog(`[Monitor] Cycle #${totalCycles} starting — ${new Date().toLocaleString("hr-HR")} (Uptime: ${formatUptime()})`, "info");
+    await dbLog(`Cycle #${totalCycles} starting — ${new Date().toLocaleString("hr-HR")} (Uptime: ${formatUptime()})`, "info");
     await dbLog(`${"═".repeat(60)}`, "info");
 
     // Pre-fetch all known external_ids from the database once per cycle
@@ -181,7 +222,7 @@ async function runMonitor() {
       .select("external_id");
 
     if (existingError) {
-      await dbLog(`[Monitor] Failed to fetch existing listings: ${existingError.message}`, "error");
+      await dbLog(`Failed to fetch existing listings: ${existingError.message}`, "error");
       await randomDelay(30000, 60000);
       continue;
     }
@@ -189,28 +230,27 @@ async function runMonitor() {
     const knownIds = new Set<string>(
       (existingData || []).map((row: any) => row.external_id)
     );
-    await dbLog(`[Monitor] Database has ${knownIds.size} known listings.`, "info");
+    await dbLog(`Database has ${knownIds.size} known listings.`, "info");
 
-    // Cycle through all categories
-    const categoryKeys = Object.keys(CATEGORIES);
+    // Cycle through all categories (in shuffled order for this worker)
     for (let i = 0; i < categoryKeys.length; i++) {
       if (shuttingDown) break;
 
       // Check if PID file was deleted mid-cycle
       if (!fs.existsSync(PID_FILE)) {
-        await dbLog("[Monitor] PID file missing. Stopping mid-cycle.", "warning");
+        await dbLog("PID file missing. Stopping mid-cycle.", "warning");
         await shutdown();
         break;
       }
 
       const category = categoryKeys[i];
-      await dbLog(`\n[Monitor] ── Category ${i + 1}/${categoryKeys.length}: ${category} ──`, "info");
+      await dbLog(`\n── Category ${i + 1}/${categoryKeys.length}: ${category} ──`, "info");
 
       // Scrape search page
       const result = await scrapeSearchPageOnly(page, category);
 
       if (result.blocked) {
-        await dbLog(`[Monitor] ⚠️  BLOCKED by ShieldSquare! Backing off for ${BLOCKED_BACKOFF_MS / 60000} minutes...`, "error");
+        await dbLog(`⚠️  BLOCKED by ShieldSquare! Backing off for ${BLOCKED_BACKOFF_MS / 60000} minutes...`, "error");
         blocked = true;
 
         // Restart browser with a new identity
@@ -233,12 +273,12 @@ async function runMonitor() {
           extraHTTPHeaders: { "Accept-Language": "hr-HR,hr;q=0.9,en-US;q=0.8,en;q=0.7" },
         });
         page = await context.newPage();
-        await dbLog(`[Monitor] Browser restarted with new UA: ${newUA.substring(0, 50)}...`, "info");
+        await dbLog(`Browser restarted with new UA: ${newUA.substring(0, 50)}...`, "info");
         break; // Restart the cycle
       }
 
       if (result.listings.length === 0) {
-        await dbLog(`[Monitor] [${category}] No listings found, skipping.`, "info");
+        await dbLog(`[${category}] No listings found, skipping.`, "info");
       } else {
         // Find truly new ads
         const newListings = result.listings.filter(
@@ -246,9 +286,9 @@ async function runMonitor() {
         );
 
         if (newListings.length === 0) {
-          await dbLog(`[Monitor] [${category}] All ${result.listings.length} listings already known.`, "info");
+          await dbLog(`[${category}] All ${result.listings.length} listings already known.`, "info");
         } else {
-          await dbLog(`[Monitor] [${category}] 🆕 ${newListings.length} NEW ads detected on page 1! Checking details...`, "info");
+          await dbLog(`[${category}] 🆕 ${newListings.length} NEW ads detected on page 1! Checking details...`, "info");
 
           // Extract cookies from the Playwright session for fast HTTP fetches
           const cookies = await context.cookies();
@@ -282,7 +322,7 @@ async function runMonitor() {
                 listing.advertiser_type = detail.advertiserType;
               }
               // Promoted & published date from detail page
-              listing.is_promoted = detail.isPromoted;
+              listing.is_promoted = listing.is_promoted || detail.isPromoted;
               if (detail.publishedAt) {
                 listing.published_at = detail.publishedAt;
               }
@@ -293,17 +333,17 @@ async function runMonitor() {
                 cyclePrivateAds++;
                 privateListingsToSave.push(listing);
                 await dbLog(
-                  `[Monitor] [${category}] 🔑 PRIVATE | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
+                  `[${category}] 🔑 PRIVATE | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
                   "success"
                 );
               } else {
                 await dbLog(
-                  `[Monitor] [${category}]    Agency  | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
+                  `[${category}]    Agency  | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
                   "info"
                 );
               }
             } catch (err) {
-              await dbLog(`[Monitor] [${category}] Failed to fetch detail for ${listing.external_id}: ${(err as Error).message}`, "warning");
+              await dbLog(`[${category}] Failed to fetch detail for ${listing.external_id}: ${(err as Error).message}`, "warning");
               // We won't save it if we can't fetch detail to confirm it's private
             }
 
@@ -318,21 +358,27 @@ async function runMonitor() {
               .upsert(privateListingsToSave, { onConflict: "external_id", ignoreDuplicates: true });
 
             if (insertError) {
-              await dbLog(`[Monitor] [${category}] Insert error: ${insertError.message}`, "error");
+              await dbLog(`[${category}] Insert error: ${insertError.message}`, "error");
             } else {
-              await dbLog(`[Monitor] [${category}] ✅ Saved ${privateListingsToSave.length} PRIVATE listings to database.`, "success");
+              await dbLog(`[${category}] ✅ Saved ${privateListingsToSave.length} PRIVATE listings to database.`, "success");
               cycleNewAds += privateListingsToSave.length;
             }
           } else {
-             await dbLog(`[Monitor] [${category}] No private ads found in this batch.`, "info");
+             await dbLog(`[${category}] No private ads found in this batch.`, "info");
           }
         }
       }
 
+      // Log this category scan to the database for stats tracking
+      await (supabase as any).from("category_scans").insert({
+        category: category,
+        worker_id: WORKER_ID,
+      });
+
       // Wait between categories (looks human)
       if (i < categoryKeys.length - 1 && !shuttingDown) {
         const delay = CATEGORY_DELAY_MS.min + Math.floor(Math.random() * (CATEGORY_DELAY_MS.max - CATEGORY_DELAY_MS.min));
-        await dbLog(`[Monitor] Waiting ${Math.round(delay / 1000)}s before next category...`, "info");
+        await dbLog(`Waiting ${Math.round(delay / 1000)}s before next category...`, "info");
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
@@ -343,24 +389,26 @@ async function runMonitor() {
     const cycleDuration = Math.round((Date.now() - cycleStart) / 1000);
 
     await dbLog(`\n${"─".repeat(60)}`, "info");
-    await dbLog(`[Monitor] Cycle #${totalCycles} complete in ${cycleDuration}s`, "info");
-    await dbLog(`[Monitor]   This cycle: ${cycleNewAds} private ads saved`, "success");
-    await dbLog(`[Monitor]   All time:   ${totalNewAds} private ads saved (${totalCycles} cycles)`, "info");
+    await dbLog(`Cycle #${totalCycles} complete in ${cycleDuration}s`, "info");
+    await dbLog(`  This cycle: ${cycleNewAds} private ads saved`, "success");
+    await dbLog(`  All time:   ${totalNewAds} private ads saved (${totalCycles} cycles)`, "info");
     await dbLog(`${"─".repeat(60)}`, "info");
 
-    // Log scrape run to database
+    // Log scrape run to database (includes worker_id and cycle_duration_s for stats)
     await (supabase as any).from("scrape_runs").insert({
       source: "njuskalo",
       status: blocked ? "error" : "success",
       listings_found: cycleNewAds,
       new_listings: cycleNewAds,
       error_message: blocked ? "Bot protection detected — browser restarted" : null,
+      worker_id: WORKER_ID,
+      cycle_duration_s: cycleDuration,
     });
 
     // Rest between full cycles
     if (!shuttingDown) {
       const rest = CYCLE_REST_MS.min + Math.floor(Math.random() * (CYCLE_REST_MS.max - CYCLE_REST_MS.min));
-      await dbLog(`[Monitor] Resting ${Math.round(rest / 1000)}s before next cycle...\n`, "info");
+      await dbLog(`Resting ${Math.round(rest / 1000)}s before next cycle...\n`, "info");
       await new Promise((resolve) => setTimeout(resolve, rest));
     }
   }
@@ -368,8 +416,8 @@ async function runMonitor() {
 
 // Start the monitor
 runMonitor().catch(async (err) => {
-  console.error("[Monitor] Fatal error:", err);
-  await dbLog(`[Monitor] Fatal error: ${err.message}`, "error");
+  console.error(`${WORKER_TAG} Fatal error:`, err);
+  await dbLog(`Fatal error: ${err.message}`, "error");
   if (fs.existsSync(PID_FILE)) fs.unlinkSync(PID_FILE);
   process.exit(1);
 });

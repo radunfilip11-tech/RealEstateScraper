@@ -4,48 +4,87 @@ import * as fs from "fs";
 import * as path from "path";
 import { createClient } from "@supabase/supabase-js";
 
-const PID_FILE = path.resolve(process.cwd(), "monitor.pid");
+const DEFAULT_WORKER_COUNT = 3;
+
+function getPidFilePath(workerId: number): string {
+  return path.resolve(process.cwd(), `monitor-${workerId}.pid`);
+}
+
+function getActiveWorkerIds(): number[] {
+  const active: number[] = [];
+  // Check for worker IDs 1 through 10 (more than enough)
+  for (let i = 1; i <= 10; i++) {
+    if (fs.existsSync(getPidFilePath(i))) {
+      active.push(i);
+    }
+  }
+  return active;
+}
 
 export async function POST(req: Request) {
   try {
-    const { action } = await req.json();
+    const { action, workers } = await req.json();
 
     if (action === "start") {
-      if (fs.existsSync(PID_FILE)) {
-        return NextResponse.json({ error: "Monitor is already running." }, { status: 400 });
+      const activeWorkers = getActiveWorkerIds();
+      if (activeWorkers.length > 0) {
+        return NextResponse.json(
+          { error: `Monitor already running with ${activeWorkers.length} worker(s).` },
+          { status: 400 }
+        );
       }
 
-      // Spawn the monitor process detached
-      const child = spawn("npm", ["run", "monitor"], {
-        detached: true,
-        stdio: "ignore",
-        cwd: process.cwd(),
-        shell: process.platform === "win32"
+      const workerCount = workers || DEFAULT_WORKER_COUNT;
+
+      // Spawn N separate worker processes
+      for (let i = 1; i <= workerCount; i++) {
+        const child = spawn(
+          "npm",
+          ["run", "monitor", "--", "--worker-id", String(i)],
+          {
+            detached: true,
+            stdio: "ignore",
+            cwd: process.cwd(),
+            shell: process.platform === "win32",
+          }
+        );
+
+        child.unref(); // Allow the parent (Next.js) to exit independently
+
+        // Write PID file as a fallback/immediate indicator
+        if (child.pid) {
+          fs.writeFileSync(getPidFilePath(i), child.pid.toString(), "utf-8");
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Monitor started with ${workerCount} workers.`,
+        workerCount,
       });
-
-      child.unref(); // Allow the parent (Next.js) to exit independently
-
-      // The monitor script will write its own PID file when it starts,
-      // but we can also write it here as a fallback/immediate indicator.
-      if (child.pid) {
-         fs.writeFileSync(PID_FILE, child.pid.toString(), "utf-8");
-      }
-
-      return NextResponse.json({ success: true, message: "Monitor started." });
     }
 
     if (action === "stop") {
-      if (!fs.existsSync(PID_FILE)) {
-        return NextResponse.json({ error: "Monitor is not running." }, { status: 400 });
+      const activeWorkers = getActiveWorkerIds();
+      if (activeWorkers.length === 0) {
+        return NextResponse.json(
+          { error: "Monitor is not running." },
+          { status: 400 }
+        );
       }
 
-      // We just delete the PID file. The monitor loop checks for this file and will
-      // gracefully shut down on the next cycle iteration if it's missing.
-      fs.unlinkSync(PID_FILE);
-      
-      // Optionally, we could read the PID and process.kill(pid), but graceful shutdown
-      // via the missing PID file is cleaner for Playwright.
-      return NextResponse.json({ success: true, message: "Monitor stop requested (graceful shutdown)." });
+      // Delete all PID files to signal graceful shutdown
+      for (const workerId of activeWorkers) {
+        const pidFile = getPidFilePath(workerId);
+        if (fs.existsSync(pidFile)) {
+          fs.unlinkSync(pidFile);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Stop requested for ${activeWorkers.length} worker(s) (graceful shutdown).`,
+      });
     }
 
     if (action === "clear_db") {
@@ -59,13 +98,19 @@ export async function POST(req: Request) {
       // Clear both tables
       await supabase.from("listings").delete().neq("id", "00000000-0000-0000-0000-000000000000"); // deletes all
       await supabase.from("scraper_console_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("scrape_runs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("category_scans").delete().neq("id", 0);
 
       return NextResponse.json({ success: true, message: "Database cleared." });
     }
 
     if (action === "status") {
-      const isRunning = fs.existsSync(PID_FILE);
-      return NextResponse.json({ isRunning });
+      const activeWorkers = getActiveWorkerIds();
+      return NextResponse.json({
+        isRunning: activeWorkers.length > 0,
+        workerCount: activeWorkers.length,
+        workerIds: activeWorkers,
+      });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

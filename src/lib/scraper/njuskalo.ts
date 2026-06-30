@@ -172,8 +172,8 @@ export function parseDetailPageHTML(html: string): {
     advertiserType = "Privatni";
   }
 
-  // --- Promoted (detail page contains "Istaknuto oglašavanje") ---
-  const isPromoted = /istaknuto ogla/i.test(html) || /VauVau/i.test(html) || /SuperVau/i.test(html);
+  // --- Promoted (detail page contains "Istaknuto oglašavanje" or "Ovaj oglas je istaknut.") ---
+  const isPromoted = /istaknuto ogla/i.test(html) || /oglas je istaknut/i.test(html) || /VauVau/i.test(html) || /SuperVau/i.test(html);
 
   // --- Published at (detail page has <time datetime="..."> element) ---
   let publishedAt: string | null = null;
@@ -212,10 +212,10 @@ export function parseListingsFromHTML(
 ): ListingInsert[] {
   const listings: ListingInsert[] = [];
 
-  // Match each <article class="entity-body cf">...</article> block
-  // Using <article> instead of <li> because <li> can be nested, causing the regex to stop too early
+  // Match the outer <li> and the <article> block.
+  // We need the <li> wrapper because it contains classes like "EntityList-item--VauVau"
   const itemRegex =
-    /<article[^>]*class="[^"]*entity-body[^"]*"[^>]*>[\s\S]*?<\/article>/gi;
+    /<li[^>]*EntityList-item[^>]*>[\s\S]*?<article[^>]*class="[^"]*entity-body[^"]*"[^>]*>[\s\S]*?<\/article>/gi;
   const items = html.match(itemRegex) || [];
 
   for (const item of items) {
