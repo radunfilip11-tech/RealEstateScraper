@@ -29,8 +29,8 @@ Defined in `src/lib/scraper/njuskalo.ts` as `CATEGORIES` + `WORKER_CATEGORIES`.
 - **Windows**: Workers run hidden (`windowsHide: true`); logs go to `logs/worker-N.log` (QuickEdit console freeze prevention)
 - **Category assignment**: `WORKER_CATEGORIES` in `njuskalo.ts` — each worker scans a different subset
 - **Dedup**: Both workers share the same `listings` + `seen_listings` tables; paginated fetch at cycle start (Supabase 1000-row limit)
-- **Bot protection**: 60s minimum cycle duration when cycle completes too fast (low-traffic nights); 10-min backoff on ShieldSquare block
-- **Stats**: `/api/monitor/stats` — latency, category frequency, per-worker cycle metrics
+- **Bot protection**: Adaptive min cycle duration — night W1 8–10 min / W2 20–25 min; day W1 100–250s / W2 200–500s; 10-min backoff on ShieldSquare block
+- **Stats**: `/api/monitor/stats` — latency, category frequency, per-worker metrics, `adsPerHour` histogram data
 
 ## Project Structure
 ```

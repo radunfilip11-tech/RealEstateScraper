@@ -19,7 +19,7 @@ interface StatsData {
     maxMs: number;
     recent: { id: string; title: string; latencyMs: number; createdAt: string }[];
   };
-  ads: { total24h: number };
+  ads: { total24h: number; adsPerHour?: number[] };
   cycles: {
     total24h: number;
     avgDurationS: number;
@@ -88,6 +88,7 @@ export default function MonitorDashboard() {
   const [stats, setStats] = useState<StatsData | null>(null);
   const [showCatDetails, setShowCatDetails] = useState(false);
   const [showLatencyDetails, setShowLatencyDetails] = useState(false);
+  const [showAdsDetails, setShowAdsDetails] = useState(false);
   
   const logsEndRef = useRef<HTMLDivElement>(null);
   const supabase = getSupabaseBrowserClient();
@@ -336,12 +337,50 @@ export default function MonitorDashboard() {
           </div>
           <div className="text-[10px] text-slate-500 mt-1">svaki put kad prođemo sve</div>
         </div>
-        <div className="bg-[#0f172a] text-white p-4 rounded-xl shadow-sm border border-slate-700">
-          <div className="text-slate-400 text-xs font-medium mb-1">Oglasi (24h)</div>
-          <div className="text-2xl font-bold text-white">
-            {stats?.ads?.total24h || 0}
+        <div 
+          className="bg-[#0f172a] text-white p-4 rounded-xl shadow-sm border border-slate-700 cursor-pointer hover:bg-slate-800 transition-colors"
+          onClick={() => setShowAdsDetails(!showAdsDetails)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="text-slate-400 text-xs font-medium mb-1">Oglasi (24h)</div>
+            <span className="text-[10px] text-slate-500">{showAdsDetails ? "Prikaži manje" : "Po satu"}</span>
           </div>
-          <div className="text-[10px] text-slate-500 mt-1">ukupno spremljeno</div>
+          {!showAdsDetails ? (
+            <>
+              <div className="text-2xl font-bold text-white">
+                {stats?.ads?.total24h || 0}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">ukupno spremljeno</div>
+            </>
+          ) : (
+            <div className="mt-2 h-28 flex items-end justify-between gap-0.5 pt-4 border-b border-slate-700/50 pb-1">
+              {stats?.ads?.adsPerHour ? (
+                (() => {
+                  const maxAds = Math.max(...stats.ads.adsPerHour, 1);
+                  return stats.ads.adsPerHour.map((count, i) => {
+                    const heightPercent = (count / maxAds) * 100;
+                    return (
+                      <div key={i} className="flex flex-col items-center flex-1 group relative">
+                        <div 
+                          className="w-full bg-blue-500 rounded-t-sm transition-all hover:bg-blue-400" 
+                          style={{ height: `${Math.max(heightPercent, count > 0 ? 4 : 0)}%` }}
+                        />
+                        {/* Tooltip */}
+                        <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 bg-slate-800 text-xs px-1.5 py-0.5 rounded pointer-events-none whitespace-nowrap z-10 border border-slate-600">
+                          {i}:00 - {count} ogl.
+                        </div>
+                        {i % 4 === 0 && (
+                          <div className="text-[8px] text-slate-500 mt-0.5">{i}</div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()
+              ) : (
+                <div className="text-xs text-slate-500 w-full text-center pb-4">Nema podataka</div>
+              )}
+            </div>
+          )}
         </div>
         <div className="bg-[#0f172a] text-white p-4 rounded-xl shadow-sm border border-slate-700">
           <div className="text-slate-400 text-xs font-medium mb-1">Najbrže / Najsporije</div>

@@ -1,6 +1,41 @@
 # Development Log
 
-## [2026-07-01] Monitor Stats Dashboard, Worker Fixes & Category Expansion
+## [2026-07-01] Night Shift Pacing, Worker Rebalance & Ads-by-Hour Stats *(uncommitted)*
+
+### 11. Adaptive Minimum Cycle Duration (per worker + time of day)
+- **File**: `scripts/monitor.ts`
+- Replaced flat 60s minimum cycle with **timezone-aware, per-worker targets** (Europe/Zagreb):
+  - **Night (01:00–06:00)**: W1 = 8–10 min, W2 = 20–25 min between cycle starts
+  - **Day**: W1 = 100–250s, W2 = 200–500s
+- If `cycleDuration < targetDuration`, adds penalty wait before next cycle
+- **Why**: Fast empty cycles at night (~20s) were triggering ShieldSquare; daytime slows naturally when new ads need detail fetches
+
+### 12. Worker Category Rebalance (high-traffic on W1)
+- **File**: `src/lib/scraper/njuskalo.ts`
+- **W1** (4 cats — sprint): `stanovi`, `kuce`, `zemljista`, `najam_stanova`
+- **W2** (11 cats — full coverage): `najam_kuca`, `vikendice`, `poslovni_prostori`, luxury, garaze, novogradnja, remaining rent categories
+- Moved `stanovi` back to W1 (60k ads — highest traffic)
+
+### 13. Stats API Pagination & Ads-by-Hour
+- **File**: `src/app/api/monitor/stats/route.ts`
+- `scrape_runs` and `category_scans` queries now use `.limit(1000/2000)` + reverse to avoid Supabase 1000-row default truncation
+- New `ads.adsPerHour[]` — hourly distribution from last 3000 private ads (`published_at` or `created_at`)
+
+### 14. Ads-by-Hour Chart in Dashboard
+- **File**: `src/components/MonitorDashboard.tsx`
+- "Oglasi (24h)" card expandable — click "Po satu" for 24-bar hourly histogram with hover tooltips
+
+### Uncommitted files (this commit)
+| File | Changes |
+|------|---------|
+| `scripts/monitor.ts` | Night/day per-worker min cycle duration |
+| `src/lib/scraper/njuskalo.ts` | W1 = 4 high-traffic, W2 = 11 remaining |
+| `src/app/api/monitor/stats/route.ts` | Pagination limits, `adsPerHour` |
+| `src/components/MonitorDashboard.tsx` | Hourly ads bar chart |
+
+---
+
+## [2026-07-01] Monitor Stats Dashboard, Worker Fixes & Category Expansion *(committed e301fd2)*
 - **Goal**: Complete Njuškalo category coverage, balance 2-worker load by traffic volume, fix incorrect stats, and improve bot-protection resilience during low-traffic periods.
 
 ### 1. Missing Categories Added (10 → 17)
@@ -20,10 +55,10 @@ Three paths were wrong (ShieldSquare CAPTCHA or empty pages):
 - **File**: `src/lib/scraper/njuskalo.ts` — new `WORKER_CATEGORIES` export
 - **File**: `scripts/monitor.ts` — removed `shuffleCategories()`, now uses `WORKER_CATEGORIES[WORKER_ID]`
 - **Strategy**: Worker 1 = high-traffic sprint (fewer categories, faster cycles); Worker 2 = full coverage (all remaining categories)
-- **Current split** (user-tuned):
-  - W1: `kuce`, `zemljista`, `najam_stanova`, `najam_kuca`, `vikendice` (5 cats)
-  - W2: `stanovi`, `poslovni_prostori`, `luksuzne_kuce`, `luksuzni_stanovi`, `garaze`, `novogradnja`, `najam_garaza`, `najam_zemljista`, `najam_poslovnih_prostora`, `najam_luksuznih_kuca`, `najam_luksuznih_stanova` (11 cats)
-- **Note**: `stanovi` (60k ads) is only on W2 — consider moving to W1 or both workers for faster detection
+- **Current split**:
+  - W1: `stanovi`, `kuce`, `zemljista`, `najam_stanova` (4 high-traffic)
+  - W2: `najam_kuca`, `vikendice`, `poslovni_prostori`, + luxury/garaze/novogradnja/remaining rent (11 cats)
+- **Note**: Previously W1 had 5 cats without `stanovi`; rebalanced so highest-traffic category is on sprint worker
 
 ### 4. Worker Count 3 → 2
 - **Backend**: `src/app/api/monitor/control/route.ts` — `DEFAULT_WORKER_COUNT = 2`
@@ -43,14 +78,9 @@ Three paths were wrong (ShieldSquare CAPTCHA or empty pages):
   - Added `/logs` and `*.pid` to `.gitignore`
 
 ### 7. Minimum Cycle Duration (Bot Protection)
-- **Problem**: At night with few new ads, cycles completed in ~20s → ~30 page loads/min from one IP → ShieldSquare blocks
-- **Fix** (`scripts/monitor.ts`): If cycle duration < 60s, add penalty wait to enforce 60s minimum cycle time
-```typescript
-if (cycleDuration < 60) {
-  const extraWait = (60 - cycleDuration) * 1000;
-  rest += extraWait;
-}
-```
+- **Problem**: At night with few new ads, cycles completed in ~20s → ShieldSquare blocks
+- **Fix** (`scripts/monitor.ts`): Adaptive per-worker minimum cycle duration (see [2026-07-01] uncommitted section §11)
+- **Initial fix**: flat 60s penalty; **superseded** by night/day + per-worker targets
 
 ### 8. Latency Outlier Cap
 - **File**: `src/app/api/monitor/stats/route.ts`

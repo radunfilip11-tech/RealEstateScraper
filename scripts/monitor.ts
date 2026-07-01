@@ -446,11 +446,32 @@ async function runMonitor() {
     // Rest between full cycles
     if (!shuttingDown) {
       let rest = CYCLE_REST_MS.min + Math.floor(Math.random() * (CYCLE_REST_MS.max - CYCLE_REST_MS.min));
+      
+      const croatiaTime = new Date().toLocaleString("en-US", { timeZone: "Europe/Zagreb" });
+      const croatiaHour = new Date(croatiaTime).getHours();
+      // "Night shift" from 1 AM to 6 AM (Assuming '1pm' was a typo, using 1 to 6)
+      const isNightShift = croatiaHour >= 1 && croatiaHour < 6;
 
-      if (cycleDuration < 60) {
-        const extraWait = (60 - cycleDuration) * 1000;
+      let targetDuration = 60;
+      if (isNightShift) {
+        if (WORKER_ID === 1) {
+          targetDuration = 480 + Math.floor(Math.random() * 120); // 8 to 10 mins
+        } else if (WORKER_ID === 2) {
+          targetDuration = 1200 + Math.floor(Math.random() * 300); // 20 to 25 mins
+        }
+      } else {
+        if (WORKER_ID === 1) {
+          targetDuration = 100 + Math.floor(Math.random() * 151); // random between 100s and 250s
+        } else if (WORKER_ID === 2) {
+          targetDuration = 200 + Math.floor(Math.random() * 301); // random between 200s and 500s
+        }
+      }
+
+      if (cycleDuration < targetDuration) {
+        const extraWait = (targetDuration - cycleDuration) * 1000;
         rest += extraWait;
-        await dbLog(`Low traffic detected (cycle took ${cycleDuration}s). Enforcing 60s minimum cycle duration. Adding ${extraWait / 1000}s penalty wait.`, "warning");
+        const msgType = isNightShift ? "Night shift active" : "Fast cycle detected";
+        await dbLog(`${msgType} (cycle took ${cycleDuration}s). Enforcing ${targetDuration}s minimum cycle duration. Adding ${Math.round(extraWait / 1000)}s wait.`, "warning");
       }
 
       await dbLog(`Resting ${Math.round(rest / 1000)}s before next cycle...\n`, "info");

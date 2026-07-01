@@ -585,6 +585,20 @@ File header still says Worker 1 has 4 categories (`stanovi, kuce, zemljista, naj
 11. Fix worker_id type mismatch in stats (6381s bug)  
 12. Bot protection analysis — fast night cycles vs slow day cycles  
 13. Document everything in DEV_LOG, AGENTS.md, CHAT_TRANSCRIPT  
+14. *(pending commit)* Night/day cycle pacing, W1 high-traffic rebalance, ads-by-hour chart, stats pagination  
+
+---
+
+## Pending Commit (2026-07-01)
+
+**Files:** `monitor.ts`, `njuskalo.ts`, `stats/route.ts`, `MonitorDashboard.tsx`
+
+| Change | Summary |
+|--------|---------|
+| Adaptive cycle pacing | Night 1–6 AM: W1 8–10 min, W2 20–25 min; Day: W1 100–250s, W2 200–500s |
+| Worker rebalance | W1 = stanovi/kuce/zemljista/najam_stanova; W2 = all other 11 |
+| Stats pagination | scrape_runs limit 1000, category_scans limit 2000 |
+| Ads per hour | API `adsPerHour[24]` + dashboard bar chart on Oglasi card |
 
 ---
 

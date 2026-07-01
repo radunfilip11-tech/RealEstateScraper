@@ -93,14 +93,35 @@ export async function GET() {
       .gte("created_at", twentyFourHoursAgo);
     if (adsCount24h != null) totalAds24h = adsCount24h;
 
+    // Traffic by hour distribution (last 3000 private ads)
+    const adsPerHour = new Array(24).fill(0);
+    const { data: adsForStats } = await supabase
+      .from("listings")
+      .select("published_at, created_at")
+      .order("created_at", { ascending: false })
+      .limit(3000);
+      
+    if (adsForStats) {
+      for (const ad of adsForStats) {
+        const timeStr = ad.published_at || ad.created_at;
+        if (timeStr) {
+          const hour = new Date(timeStr).getHours();
+          adsPerHour[hour]++;
+        }
+      }
+    }
+
     // -----------------------------------------------------------------------
     // 2. Cycle Frequency Stats
     // -----------------------------------------------------------------------
-    const { data: recentRuns, error: runsError } = await supabase
+    const { data: recentRunsRaw, error: runsError } = await supabase
       .from("scrape_runs")
       .select("started_at, worker_id, cycle_duration_s, new_listings, status")
       .gte("started_at", twentyFourHoursAgo)
-      .order("started_at", { ascending: true });
+      .order("started_at", { ascending: false })
+      .limit(1000);
+
+    const recentRuns = recentRunsRaw ? recentRunsRaw.reverse() : [];
 
     let avgCycleDurationS = 0;
     let totalCycles24h = 0;
@@ -138,11 +159,14 @@ export async function GET() {
     // -----------------------------------------------------------------------
     // 3. Category Frequency Stats
     // -----------------------------------------------------------------------
-    const { data: categoryScans, error: catError } = await supabase
+    const { data: categoryScansRaw, error: catError } = await supabase
       .from("category_scans")
       .select("category, scanned_at, worker_id")
       .gte("scanned_at", twentyFourHoursAgo)
-      .order("scanned_at", { ascending: true });
+      .order("scanned_at", { ascending: false })
+      .limit(2000);
+
+    const categoryScans = categoryScansRaw ? categoryScansRaw.reverse() : [];
 
     const categoryGapsMs: Record<string, number> = {};
     const categoryDetails: Record<
@@ -309,6 +333,7 @@ export async function GET() {
       },
       ads: {
         total24h: totalAds24h,
+        adsPerHour: adsPerHour,
       },
       cycles: {
         total24h: totalCycles24h,

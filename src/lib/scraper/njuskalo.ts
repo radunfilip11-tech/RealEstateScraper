@@ -33,12 +33,12 @@ export const CATEGORIES: Record<string, string> = {
 export const WORKER_CATEGORIES: Record<number, string[]> = {
   // Worker 1: High-traffic sprint — only 6 categories, ~1min cycle
   1: [
-    "kuce", "zemljista", "najam_stanova", "najam_kuca", "vikendice",
+    "stanovi", "kuce", "zemljista", "najam_stanova",
   ],
   // Worker 2: Full coverage — 10 categories, ~4-5min cycle
   // High-traffic categories interleaved for even spacing
   2: [
-    "stanovi", "poslovni_prostori", "luksuzne_kuce",
+    "najam_kuca", "vikendice", "poslovni_prostori", "luksuzne_kuce",
     "luksuzni_stanovi", "garaze","novogradnja", "najam_garaza", 
     "najam_zemljista", "najam_poslovnih_prostora",
     "najam_luksuznih_kuca", "najam_luksuznih_stanova",
