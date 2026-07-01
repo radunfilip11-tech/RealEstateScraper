@@ -27,7 +27,7 @@ export default function NotificationFilterForm({
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState(existing?.name ?? "");
-  const [phoneNumber, setPhoneNumber] = useState(existing?.phone_number ?? "");
+  const [chatId, setChatId] = useState(existing?.telegram_chat_id ?? "");
   const [isActive, setIsActive] = useState(existing?.is_active ?? true);
 
   const [propertyTypes, setPropertyTypes] = useState<string[]>(
@@ -98,7 +98,7 @@ export default function NotificationFilterForm({
 
     const payload = {
       name: name.trim(),
-      phone_number: phoneNumber.trim(),
+      telegram_chat_id: chatId.trim(),
       is_active: isActive,
       property_types: propertyTypes,
       transaction_types: transactionTypes,
@@ -187,18 +187,18 @@ export default function NotificationFilterForm({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                WhatsApp broj (s pozivnim brojem)
+                Telegram Chat ID
               </label>
               <input
                 required
                 type="text"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                placeholder="+385912345678"
+                value={chatId}
+                onChange={(e) => setChatId(e.target.value)}
+                placeholder="-1001234567890"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Format: +[pozivni]broj, npr. +385912345678
+                ID grupe ili chata (doznajte ga od @RawDataBot u Telegramu)
               </p>
             </div>
 

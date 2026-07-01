@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { sendAgentNotification } from "@/lib/notifications/whatsapp";
+import { sendAgentNotification } from "@/lib/notifications/telegram";
 import type { Listing, NotificationFilter } from "@/lib/supabase/types";
 
 /**
@@ -105,13 +105,13 @@ function formatMatchLine(listing: Listing): string {
  *
  * Body (all optional):
  *   filter_id: string  -> only run for this specific filter (used by "Test" button)
- *   dry_run: boolean   -> if true, do not actually send WhatsApp or update DB
+ *   dry_run: boolean   -> if true, do not actually send Telegram or update DB
  *
  * Behavior:
  *   - Loads active notification_filters (or a single filter if filter_id is given)
  *   - For each filter, finds listings created after filter.last_notified_at
  *     (or the last 24h if never notified) that match the filter's criteria
- *   - Sends one batched WhatsApp per filter (via sendAgentNotification)
+ *   - Sends one batched Telegram message per filter (via sendAgentNotification)
  *   - Updates filter.last_notified_at on success
  */
 export async function POST(request: Request) {
@@ -217,7 +217,7 @@ export async function POST(request: Request) {
       }
 
       const messages = matches.map(formatMatchLine);
-      const sent = await sendAgentNotification(messages, filter.phone_number);
+      const sent = await sendAgentNotification(messages, filter.telegram_chat_id);
 
       if (sent) {
         await supabase
@@ -236,7 +236,7 @@ export async function POST(request: Request) {
           filter_name: filter.name,
           matches: matches.length,
           sent: false,
-          error: "WhatsApp send failed",
+          error: "Telegram send failed",
         });
       }
     }

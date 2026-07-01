@@ -97,7 +97,7 @@ export default function BuyerFormModal({ onClose }: BuyerFormModalProps) {
 
             <div className="col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Kontakt (Broj za WhatsApp)
+                Kontakt
               </label>
               <input
                 type="text"

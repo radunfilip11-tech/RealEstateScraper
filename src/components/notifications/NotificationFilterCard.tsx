@@ -99,13 +99,13 @@ export default function NotificationFilterCard({
         const result = data.results?.[0];
         if (result?.sent) {
           setTestResult(
-            `Poslano ${data.matches} podudaranja na WhatsApp`,
+            `Poslano ${data.matches} podudaranja na Telegram`,
           );
         } else if (data.matches === 0) {
           setTestResult("Nema novih podudaranja");
         } else {
           setTestResult(
-            `Greška: ${result?.error || "WhatsApp slanje nije uspjelo"}`,
+            `Greška: ${result?.error || "Telegram slanje nije uspjelo"}`,
           );
         }
       } else {
@@ -152,10 +152,10 @@ export default function NotificationFilterCard({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
               />
             </svg>
-            {filter.phone_number}
+            {filter.telegram_chat_id}
           </p>
         </div>
 

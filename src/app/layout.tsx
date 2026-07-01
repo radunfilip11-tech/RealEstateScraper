@@ -12,7 +12,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Nekretnine Dashboard — Scraper za nekretnine",
   description:
-    "Dashboard za praćenje nekretnina s Njuškala. Automatsko skrapanje, filtriranje i WhatsApp obavijesti.",
+    "Dashboard za praćenje nekretnina s Njuškala. Automatsko skrapanje, filtriranje i Telegram obavijesti.",
 };
 
 export default function RootLayout({

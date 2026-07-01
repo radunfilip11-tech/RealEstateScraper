@@ -1,5 +1,48 @@
 # Development Log
 
+## [2026-07-01] Saved Filter Presets & Last-Used Filter Persistence
+
+### 18. Filter presets with localStorage persistence
+- **New files**:
+  - `src/hooks/useFilterPresets.ts` — custom hook for preset CRUD + last-used filter auto-save/restore via localStorage
+  - `src/components/ui/SavedFiltersBar.tsx` — preset chip bar UI (save, load, rename, update, delete)
+- **Edited**:
+  - `src/lib/supabase/types.ts` — added `FilterState` and `FilterPreset` interfaces
+  - `src/components/Dashboard.tsx` — integrated auto-restore, auto-persist, preset bar, `applyFilters()` / `getCurrentFilters()` helpers, expanded `activeFilterCount`
+- **Features**:
+  - **Last used filters**: All filter state (search, locations, transaction types, property types, advertiser, sources, statuses, price/size ranges, date range, sort, showHidden) is automatically saved to localStorage on every change and restored on page load.
+  - **Named presets**: Users can save the current filter combination with a custom name. Presets appear as clickable chips above the filter bar. Each preset has a hover menu with: update (overwrite with current filters), rename, and delete.
+  - **Active preset highlighting**: The currently loaded preset gets an emerald ring indicator.
+  - **Filter summary tooltip**: Hovering over a preset chip shows a summary of what filters it contains (transaction, property type, location, price/size ranges).
+  - **Expanded active filter count**: `activeFilterCount` now includes search, location, transaction, status — not just source/property/advertiser/ranges.
+- **Storage keys** (localStorage):
+  - `nekretnine_last_filters` — last-used filter snapshot (auto-saved on every change)
+  - `nekretnine_filter_presets` — array of named `FilterPreset` objects
+- **Storage**: Pure localStorage — no DB table needed since this is a single-user internal app.
+- **Cleared filters**: The "Očisti" button now resets to `DEFAULT_FILTERS` via `applyFilters()` AND deselects the active preset.
+- **Hook API** (`useFilterPresets`):
+  - `presets`, `activePresetId`, `setActivePresetId`
+  - `savePreset(name, filters)`, `updatePreset(id, filters)`, `renamePreset(id, name)`, `deletePreset(id)`
+  - Standalone: `getLastFilters()`, `persistLastFilters(filters)`, `DEFAULT_FILTERS`
+  - Presets load from localStorage in `useEffect` (same hydration-safe pattern as last-filters restore)
+- **UI placement**: `SavedFiltersBar` sits between `SearchBar` and the `#filters-bar` filter dropdown row on `/`.
+- **Types added** (`src/lib/supabase/types.ts`):
+  - `FilterState` — full dashboard filter snapshot (18 fields)
+  - `FilterPreset` — `{ id, name, filters: FilterState, createdAt }`
+- **Not in scope** (future): URL query-param sync, DB-backed presets, sharing presets across devices. Closest existing pattern for server-persisted filters is `notification_filters` on `/notifications`.
+
+### 19. Fix hydration mismatch on filter restore
+- **File**: `src/components/Dashboard.tsx`
+- **Problem**: Initial implementation called `getLastFilters()` inside `useState()` initializers. Server renders with `DEFAULT_FILTERS` (no `localStorage`), client renders with saved filters (e.g. "Split" in `LocationFilterDropdown`, `hasActiveFilters={true}` on `SavedFiltersBar`) → React hydration mismatch.
+- **Fix**:
+  - All filter `useState` hooks now initialize from `DEFAULT_FILTERS` (server and client first render match).
+  - Restore from `getLastFilters()` moved to a mount-only `useEffect`.
+  - Added `filtersRestoredRef` guard so the auto-persist effect does not overwrite saved filters with defaults before restore completes.
+- **Tradeoff**: Brief flash of default filters on first paint before restore applies — acceptable for a single-user dashboard.
+- **Lesson**: Never read `localStorage` during SSR or initial `useState` in Next.js Client Components; defer to `useEffect` after hydration.
+
+---
+
 ## [2026-07-01] Notification Filters Tab (WhatsApp alerts per saved filter rule)
 
 ### 17. New "Obavijesti" tab with per-filter WhatsApp notification rules

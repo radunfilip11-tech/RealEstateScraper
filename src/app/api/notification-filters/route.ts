@@ -30,16 +30,16 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    if (!body.name || !body.phone_number) {
+    if (!body.name || !body.telegram_chat_id) {
       return NextResponse.json(
-        { error: "name and phone_number are required" },
+        { error: "name and telegram_chat_id are required" },
         { status: 400 },
       );
     }
 
     const row = {
       name: body.name,
-      phone_number: body.phone_number,
+      telegram_chat_id: body.telegram_chat_id,
       is_active: body.is_active ?? true,
       property_types: body.property_types ?? [],
       transaction_types: body.transaction_types ?? [],

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { Listing } from "@/lib/supabase/types";
+import type { Listing, FilterState } from "@/lib/supabase/types";
 import { PROPERTY_TYPES, ADVERTISER_TYPES, SOURCES, TRANSACTION_TYPES, LISTING_STATUSES } from "@/lib/supabase/types";
 import StatsBar from "@/components/ui/StatsBar";
 import SearchBar from "@/components/ui/SearchBar";
@@ -11,6 +11,13 @@ import RangeFilter from "@/components/ui/RangeFilter";
 import DateRangeFilter from "@/components/ui/DateRangeFilter";
 import LocationFilterDropdown from "@/components/ui/LocationFilterDropdown";
 import ListingCard from "@/components/ui/ListingCard";
+import SavedFiltersBar from "@/components/ui/SavedFiltersBar";
+import {
+  useFilterPresets,
+  getLastFilters,
+  persistLastFilters,
+  DEFAULT_FILTERS,
+} from "@/hooks/useFilterPresets";
 export default function Dashboard() {
   // Data state
   const [listings, setListings] = useState<Listing[]>([]);
@@ -21,25 +28,37 @@ export default function Dashboard() {
   const [scrapeCounty, setScrapeCounty] = useState<string>("");
   const [scrapeCategory, setScrapeCategory] = useState<string>("");
 
-  // Filter state
-  const [search, setSearch] = useState("");
-  const [selectedCounties, setSelectedCounties] = useState<string[]>([]);
-  const [selectedCities, setSelectedCities] = useState<string[]>([]);
-  const [selectedNeighborhoods, setSelectedNeighborhoods] = useState<string[]>([]);
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [selectedPropertyTypes, setSelectedPropertyTypes] = useState<string[]>([]);
-  const [selectedTransactionTypes, setSelectedTransactionTypes] = useState<string[]>([]);
-  const [selectedAdvertiserTypes, setSelectedAdvertiserTypes] = useState<string[]>([]);
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [showHidden, setShowHidden] = useState(false);
-  const [priceMin, setPriceMin] = useState<number | null>(null);
-  const [priceMax, setPriceMax] = useState<number | null>(null);
-  const [sizeMin, setSizeMin] = useState<number | null>(null);
-  const [sizeMax, setSizeMax] = useState<number | null>(null);
-  const [sort, setSort] = useState<string>("newest");
-  const [dateFrom, setDateFrom] = useState<string>("");
-  const [dateTo, setDateTo] = useState<string>("");
-  const [dateField, setDateField] = useState<"published_at" | "created_at">("published_at");
+  // Filter state — start with defaults, restored from localStorage in useEffect
+  const [search, setSearch] = useState(DEFAULT_FILTERS.search);
+  const [selectedCounties, setSelectedCounties] = useState<string[]>(DEFAULT_FILTERS.selectedCounties);
+  const [selectedCities, setSelectedCities] = useState<string[]>(DEFAULT_FILTERS.selectedCities);
+  const [selectedNeighborhoods, setSelectedNeighborhoods] = useState<string[]>(DEFAULT_FILTERS.selectedNeighborhoods);
+  const [selectedSources, setSelectedSources] = useState<string[]>(DEFAULT_FILTERS.selectedSources);
+  const [selectedPropertyTypes, setSelectedPropertyTypes] = useState<string[]>(DEFAULT_FILTERS.selectedPropertyTypes);
+  const [selectedTransactionTypes, setSelectedTransactionTypes] = useState<string[]>(DEFAULT_FILTERS.selectedTransactionTypes);
+  const [selectedAdvertiserTypes, setSelectedAdvertiserTypes] = useState<string[]>(DEFAULT_FILTERS.selectedAdvertiserTypes);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(DEFAULT_FILTERS.selectedStatuses);
+  const [showHidden, setShowHidden] = useState(DEFAULT_FILTERS.showHidden);
+  const [priceMin, setPriceMin] = useState<number | null>(DEFAULT_FILTERS.priceMin);
+  const [priceMax, setPriceMax] = useState<number | null>(DEFAULT_FILTERS.priceMax);
+  const [sizeMin, setSizeMin] = useState<number | null>(DEFAULT_FILTERS.sizeMin);
+  const [sizeMax, setSizeMax] = useState<number | null>(DEFAULT_FILTERS.sizeMax);
+  const [sort, setSort] = useState<string>(DEFAULT_FILTERS.sort);
+  const [dateFrom, setDateFrom] = useState<string>(DEFAULT_FILTERS.dateFrom);
+  const [dateTo, setDateTo] = useState<string>(DEFAULT_FILTERS.dateTo);
+  const [dateField, setDateField] = useState<"published_at" | "created_at">(DEFAULT_FILTERS.dateField);
+  const filtersRestoredRef = useRef(false);
+
+  // Saved filter presets
+  const {
+    presets,
+    activePresetId,
+    setActivePresetId,
+    savePreset,
+    updatePreset,
+    renamePreset,
+    deletePreset,
+  } = useFilterPresets();
 
   // All known locations for the autocomplete dropdown
   const [allLocations, setAllLocations] = useState<
@@ -64,6 +83,89 @@ export default function Dashboard() {
       }
     }
     fetchLocations();
+  }, []);
+
+  // Build current filter state snapshot
+  const getCurrentFilters = useCallback((): FilterState => ({
+    search,
+    selectedCounties,
+    selectedCities,
+    selectedNeighborhoods,
+    selectedSources,
+    selectedPropertyTypes,
+    selectedTransactionTypes,
+    selectedAdvertiserTypes,
+    selectedStatuses,
+    showHidden,
+    priceMin,
+    priceMax,
+    sizeMin,
+    sizeMax,
+    sort,
+    dateFrom,
+    dateTo,
+    dateField,
+  }), [
+    search, selectedCounties, selectedCities, selectedNeighborhoods,
+    selectedSources, selectedPropertyTypes, selectedTransactionTypes,
+    selectedAdvertiserTypes, selectedStatuses, showHidden,
+    priceMin, priceMax, sizeMin, sizeMax, sort, dateFrom, dateTo, dateField,
+  ]);
+
+  // Restore last used filters from localStorage after first render (avoids hydration mismatch)
+  useEffect(() => {
+    const saved = getLastFilters();
+    const isDifferent = JSON.stringify(saved) !== JSON.stringify(DEFAULT_FILTERS);
+    if (isDifferent) {
+      setSearch(saved.search);
+      setSelectedCounties(saved.selectedCounties);
+      setSelectedCities(saved.selectedCities);
+      setSelectedNeighborhoods(saved.selectedNeighborhoods);
+      setSelectedSources(saved.selectedSources);
+      setSelectedPropertyTypes(saved.selectedPropertyTypes);
+      setSelectedTransactionTypes(saved.selectedTransactionTypes);
+      setSelectedAdvertiserTypes(saved.selectedAdvertiserTypes);
+      setSelectedStatuses(saved.selectedStatuses);
+      setShowHidden(saved.showHidden);
+      setPriceMin(saved.priceMin);
+      setPriceMax(saved.priceMax);
+      setSizeMin(saved.sizeMin);
+      setSizeMax(saved.sizeMax);
+      setSort(saved.sort);
+      setDateFrom(saved.dateFrom);
+      setDateTo(saved.dateTo);
+      setDateField(saved.dateField);
+    }
+    filtersRestoredRef.current = true;
+  }, []);
+
+  // Auto-persist last used filters to localStorage (skip until restore is done)
+  useEffect(() => {
+    if (filtersRestoredRef.current) {
+      persistLastFilters(getCurrentFilters());
+    }
+  }, [getCurrentFilters]);
+
+  // Apply a filter preset or snapshot
+  const applyFilters = useCallback((f: FilterState) => {
+    setSearch(f.search);
+    setSelectedCounties(f.selectedCounties);
+    setSelectedCities(f.selectedCities);
+    setSelectedNeighborhoods(f.selectedNeighborhoods);
+    setSelectedSources(f.selectedSources);
+    setSelectedPropertyTypes(f.selectedPropertyTypes);
+    setSelectedTransactionTypes(f.selectedTransactionTypes);
+    setSelectedAdvertiserTypes(f.selectedAdvertiserTypes);
+    setSelectedStatuses(f.selectedStatuses);
+    setShowHidden(f.showHidden);
+    setPriceMin(f.priceMin);
+    setPriceMax(f.priceMax);
+    setSizeMin(f.sizeMin);
+    setSizeMax(f.sizeMax);
+    setSort(f.sort);
+    setDateFrom(f.dateFrom);
+    setDateTo(f.dateTo);
+    setDateField(f.dateField);
   }, []);
 
   // Fetch listings from Supabase
@@ -221,30 +323,23 @@ export default function Dashboard() {
   ).length;
 
   const activeFilterCount = [
+    search.length > 0,
+    selectedCounties.length > 0,
+    selectedCities.length > 0,
+    selectedNeighborhoods.length > 0,
+    selectedTransactionTypes.length > 0,
     selectedSources.length > 0,
     selectedPropertyTypes.length > 0,
     selectedAdvertiserTypes.length > 0,
+    selectedStatuses.length > 0,
     priceMin !== null || priceMax !== null,
     sizeMin !== null || sizeMax !== null,
     dateFrom !== "" || dateTo !== "",
   ].filter(Boolean).length;
 
   const clearAllFilters = () => {
-    setSearch("");
-    setSelectedCounties([]);
-    setSelectedCities([]);
-    setSelectedNeighborhoods([]);
-    setSelectedSources([]);
-    setSelectedPropertyTypes([]);
-    setSelectedAdvertiserTypes([]);
-    setPriceMin(null);
-    setPriceMax(null);
-    setSizeMin(null);
-    setSizeMax(null);
-    setDateFrom("");
-    setDateTo("");
-    setDateField("published_at");
-    setSort("newest");
+    applyFilters(DEFAULT_FILTERS);
+    setActivePresetId(null);
   };
 
   // Handle hide listing
@@ -413,6 +508,23 @@ export default function Dashboard() {
 
       {/* Search */}
       <SearchBar value={search} onChange={setSearch} />
+
+      {/* Saved filter presets */}
+      <div className="mb-4">
+        <SavedFiltersBar
+          presets={presets}
+          activePresetId={activePresetId}
+          hasActiveFilters={activeFilterCount > 0}
+          onSave={(name) => savePreset(name, getCurrentFilters())}
+          onLoad={(preset) => {
+            applyFilters(preset.filters);
+            setActivePresetId(preset.id);
+          }}
+          onUpdate={(id) => updatePreset(id, getCurrentFilters())}
+          onDelete={deletePreset}
+          onRename={renamePreset}
+        />
+      </div>
 
       {/* Filters */}
       <div

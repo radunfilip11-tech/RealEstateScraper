@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { sendAgentNotification } from "@/lib/notifications/whatsapp";
+import { sendAgentNotification } from "@/lib/notifications/telegram";
 import type { Listing, Buyer } from "@/lib/supabase/types";
 
 function matchesCriteria(listing: Listing, criteria: Record<string, any> | null): boolean {
@@ -22,12 +22,12 @@ function matchesCriteria(listing: Listing, criteria: Record<string, any> | null)
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const phoneNumber = body.phone_number;
+    const chatId = body.chat_id || body.phone_number;
 
-    if (!phoneNumber) {
+    if (!chatId) {
       return NextResponse.json(
-        { error: "phone_number is required" },
-        { status: 400 }
+        { error: "chat_id is required" },
+        { status: 400 },
       );
     }
 
@@ -79,11 +79,11 @@ export async function POST(request: Request) {
 
     // Send notification to the agent if there are matches
     if (matchedMessages.length > 0) {
-      const sent = await sendAgentNotification(matchedMessages, phoneNumber);
+      const sent = await sendAgentNotification(matchedMessages, chatId);
       if (!sent) {
         return NextResponse.json(
-          { error: "Failed to send WhatsApp notification" },
-          { status: 500 }
+          { error: "Failed to send Telegram notification" },
+          { status: 500 },
         );
       }
     }

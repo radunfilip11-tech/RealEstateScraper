@@ -1,6 +1,6 @@
 import { scrapeNjuskalo } from "../src/lib/scraper/njuskalo";
 import { getSupabaseServerClient } from "../src/lib/supabase/server";
-import { sendAgentNotification } from "../src/lib/notifications/whatsapp";
+import { sendAgentNotification } from "../src/lib/notifications/telegram";
 import type { Listing, Buyer } from "../src/lib/supabase/types";
 
 // Helper to check if listing matches buyer criteria
@@ -104,9 +104,9 @@ async function runCron() {
     console.log(`Saved ${insertedCount} new, ${renewedCount} renewed.`);
 
     // 5. Notifications
-    const targetPhone = process.env.AGENT_PHONE_NUMBER;
-    if (!targetPhone) {
-      console.log("No AGENT_PHONE_NUMBER set for notifications. Skipping WhatsApp.");
+    const targetChatId = process.env.TELEGRAM_DEFAULT_CHAT_ID;
+    if (!targetChatId) {
+      console.log("No TELEGRAM_DEFAULT_CHAT_ID set for notifications. Skipping Telegram.");
       return;
     }
 
@@ -134,17 +134,17 @@ async function runCron() {
 
         if (isMatch) {
           try {
-            await sendAgentNotification(targetPhone, listing as Listing);
+            await sendAgentNotification([`🏠 ${(listing as Listing).title}\n💰 ${(listing as Listing).price || "Na upit"}\n📍 ${(listing as Listing).location || "Nepoznato"}\n🔗 ${(listing as Listing).url}`], targetChatId);
             await supabase.from("listings").update({ notified: true }).eq("id", listing.id);
             notificationsSent++;
           } catch (e) {
-            console.error("WhatsApp error:", e);
+            console.error("Telegram error:", e);
           }
         }
       }
     }
     
-    console.log(`Sent ${notificationsSent} WhatsApp notifications.`);
+    console.log(`Sent ${notificationsSent} Telegram notifications.`);
     console.log("Cron finished successfully!");
 
   } catch (err) {

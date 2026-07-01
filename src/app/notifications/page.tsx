@@ -96,10 +96,10 @@ export default function NotificationsPage() {
         <div className="text-sm text-emerald-800">
           <p className="font-medium mb-1">Kako to radi</p>
           <p className="text-emerald-700 text-xs leading-relaxed">
-            Definirajte filtere za koje želite primati WhatsApp obavijesti.
-            Svako pravilo ima svoj broj telefona i skup filtera. Kada
+            Definirajte filtere za koje želite primati Telegram obavijesti.
+            Svako pravilo ima svoj Chat ID i skup filtera. Kada
             monitor pronađe novi oglas koji odgovara filterima, dobit
-            ćete WhatsApp obavijest.
+            ćete Telegram obavijest.
           </p>
         </div>
       </div>
@@ -148,7 +148,7 @@ export default function NotificationsPage() {
             Još nemate pravila
           </h3>
           <p className="text-xs text-gray-500 max-w-[300px] mb-4">
-            Kreirajte prvo pravilo za obavijesti kako biste dobili WhatsApp
+            Kreirajte prvo pravilo za obavijesti kako biste dobili Telegram
             poruke o novim oglasima koji odgovaraju vašim kriterijima.
           </p>
           <button

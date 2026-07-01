@@ -1,5 +1,5 @@
 /**
- * Local polling script for WhatsApp notification filters.
+ * Local polling script for Telegram notification filters.
  *
  * Usage:
  *   npm run notify-poll                        # continuous loop, default 5 min interval
@@ -13,7 +13,7 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 import { getSupabaseServerClient } from "../src/lib/supabase/server";
-import { sendAgentNotification } from "../src/lib/notifications/whatsapp";
+import { sendAgentNotification } from "../src/lib/notifications/telegram";
 import type { Listing, NotificationFilter } from "../src/lib/supabase/types";
 
 function listingMatchesFilter(
@@ -147,16 +147,16 @@ async function pollOnce(): Promise<void> {
     );
 
     const messages = matches.map(formatMatchLine);
-    const sent = await sendAgentNotification(messages, filter.phone_number);
+    const sent = await sendAgentNotification(messages, filter.telegram_chat_id);
 
     if (sent) {
       await supabase
         .from("notification_filters")
         .update({ last_notified_at: new Date().toISOString() })
         .eq("id", filter.id);
-      console.log(`[notify-poll] "${filter.name}": WhatsApp sent OK`);
+      console.log(`[notify-poll] "${filter.name}": Telegram sent OK`);
     } else {
-      console.error(`[notify-poll] "${filter.name}": WhatsApp send FAILED`);
+      console.error(`[notify-poll] "${filter.name}": Telegram send FAILED`);
     }
   }
 }

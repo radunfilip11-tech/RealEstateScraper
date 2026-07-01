@@ -56,7 +56,7 @@ export interface SeenListing {
 export interface NotificationFilter {
   id: string;
   name: string;
-  phone_number: string;
+  telegram_chat_id: string;
   is_active: boolean;
 
   property_types: string[];
@@ -130,3 +130,31 @@ export type AdvertiserType = (typeof ADVERTISER_TYPES)[number];
 export type Source = (typeof SOURCES)[number];
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 export type ListingStatus = (typeof LISTING_STATUSES)[number];
+
+export interface FilterState {
+  search: string;
+  selectedCounties: string[];
+  selectedCities: string[];
+  selectedNeighborhoods: string[];
+  selectedSources: string[];
+  selectedPropertyTypes: string[];
+  selectedTransactionTypes: string[];
+  selectedAdvertiserTypes: string[];
+  selectedStatuses: string[];
+  showHidden: boolean;
+  priceMin: number | null;
+  priceMax: number | null;
+  sizeMin: number | null;
+  sizeMax: number | null;
+  sort: string;
+  dateFrom: string;
+  dateTo: string;
+  dateField: 'published_at' | 'created_at';
+}
+
+export interface FilterPreset {
+  id: string;
+  name: string;
+  filters: FilterState;
+  createdAt: string;
+}
