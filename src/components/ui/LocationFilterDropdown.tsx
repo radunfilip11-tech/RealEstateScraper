@@ -130,6 +130,7 @@ export default function LocationFilterDropdown({
   return (
     <div ref={ref} className="relative" id="filter-location">
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium border transition-all duration-150 ${
           totalSelected > 0
@@ -202,6 +203,7 @@ export default function LocationFilterDropdown({
               <div className="px-2 pb-2 mb-2 border-b border-gray-100 flex justify-between items-center">
                 <span className="text-xs text-gray-500 font-medium">Odabrane lokacije: {totalSelected}</span>
                 <button
+                  type="button"
                   onClick={clearAll}
                   className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
                 >

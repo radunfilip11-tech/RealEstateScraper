@@ -42,6 +42,7 @@ export default function RangeFilter({
   return (
     <div ref={ref} className="relative" id={`filter-${id}`}>
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium border transition-all duration-150 ${
           hasValue
@@ -100,6 +101,7 @@ export default function RangeFilter({
           </div>
           {hasValue && (
             <button
+              type="button"
               onClick={() => {
                 onMinChange(null);
                 onMaxChange(null);

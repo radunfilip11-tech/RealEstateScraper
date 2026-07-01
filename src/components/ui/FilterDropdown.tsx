@@ -53,6 +53,7 @@ export default function FilterDropdown({
   return (
     <div ref={ref} className="relative" id={`filter-${id || label.toLowerCase().replace(/\s+/g, "-")}`}>
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium border transition-all duration-150 ${
           selected.length > 0
@@ -81,6 +82,7 @@ export default function FilterDropdown({
         <div className="absolute top-full left-0 mt-1.5 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-2 animate-in fade-in slide-in-from-top-1 duration-150">
           {selected.length > 0 && (
             <button
+              type="button"
               onClick={clearAll}
               className="w-full px-4 py-1.5 text-left text-xs text-gray-400 hover:text-gray-600 transition-colors"
             >

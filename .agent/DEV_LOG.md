@@ -1,5 +1,30 @@
 # Development Log
 
+## [2026-07-01] Notification Filters Tab (WhatsApp alerts per saved filter rule)
+
+### 17. New "Obavijesti" tab with per-filter WhatsApp notification rules
+- **New files**:
+  - `supabase/migrations/20260701_create_notification_filters.sql` — new table
+  - `src/app/notifications/page.tsx` — sidebar tab page
+  - `src/components/notifications/NotificationFilterForm.tsx` — create/edit modal
+  - `src/components/notifications/NotificationFilterCard.tsx` — rule row w/ toggle, edit, delete, test
+  - `src/app/api/notification-filters/route.ts` — CRUD (GET/POST/PUT/DELETE)
+  - `src/app/api/notify/poll/route.ts` — poll & send matching WhatsApp
+  - `scripts/notify-poll.ts` — local continuous poller (`npm run notify-poll`)
+  - `vercel.json` — Vercel cron config for `/api/notify/poll` every 5 min
+- **Edited**: `src/lib/supabase/types.ts` (added `NotificationFilter` interface), `src/components/ui/Sidebar.tsx` (added tab), `package.json` (added `notify-poll` script).
+- **Feature**: User can create multiple saved filter rules; each rule has its own WhatsApp phone number and full set of Dashboard filters (location hierarchy, transaction, property type, advertiser, source, status, price range, size range). Rules can be paused/activated, tested (send matching listings now), edited, and deleted.
+- **Matching approach**: Empty arrays / null values mean "any" for that dimension. All set dimensions AND together. Per-filter `last_notified_at` prevents re-sending the same listing; fallback = last 24h for never-notified filters. Fetches at most 500 candidate listings per cycle to keep load bounded.
+- **Trigger mechanism**: Periodic polling every 5 minutes.
+  - Deployed: `vercel.json` cron hits `/api/notify/poll`.
+  - Local dev: `npm run notify-poll` (continuous loop) or `npm run notify-poll -- --once`.
+- **RLS**: `notification_filters` has full RLS enabled — service role for the poller, public policy for the internal single-user app (matches existing pattern with `listings`, `buyers`).
+- **Auto-updated timestamp**: DB trigger `notification_filters_updated_at` bumps `updated_at` on every UPDATE.
+- **Reused components**: `FilterDropdown`, `RangeFilter`, `LocationFilterDropdown` from `src/components/ui/` — form UX is identical to Dashboard filters.
+- **Lesson**: Reusing existing filter UI primitives saved a full form redesign — the same multi-select semantics translate directly to notification rules.
+
+---
+
 ## [2026-07-01] Add Sorting by Published Date
 
 ### 16. New Sort Options: Published Date from Website

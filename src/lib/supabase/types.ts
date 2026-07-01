@@ -53,6 +53,42 @@ export interface SeenListing {
   worker_id: number | null;
 }
 
+export interface NotificationFilter {
+  id: string;
+  name: string;
+  phone_number: string;
+  is_active: boolean;
+
+  property_types: string[];
+  transaction_types: string[];
+  sources: string[];
+  advertiser_types: string[];
+  statuses: string[];
+
+  location_counties: string[];
+  location_cities: string[];
+  location_neighborhoods: string[];
+
+  price_min: number | null;
+  price_max: number | null;
+  size_min: number | null;
+  size_max: number | null;
+
+  last_notified_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type NotificationFilterInsert = Omit<
+  NotificationFilter,
+  "id" | "created_at" | "updated_at" | "last_notified_at"
+> & {
+  id?: string;
+  created_at?: string;
+  updated_at?: string;
+  last_notified_at?: string | null;
+};
+
 // Insert types (without auto-generated fields)
 export type ListingInsert = Omit<Listing, "id" | "created_at" | "notified"> & {
   notified?: boolean;
