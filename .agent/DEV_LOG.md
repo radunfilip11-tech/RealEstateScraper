@@ -41,6 +41,15 @@
 - **Tradeoff**: Brief flash of default filters on first paint before restore applies — acceptable for a single-user dashboard.
 - **Lesson**: Never read `localStorage` during SSR or initial `useState` in Next.js Client Components; defer to `useEffect` after hydration.
 
+### 20. Fix filters/presets wiped on remount (ref → state guard)
+- **Files**: `src/components/Dashboard.tsx`, `src/hooks/useFilterPresets.ts`
+- **Symptoms**: After navigating away and back (Dashboard remount), (1) saved last-used filters and saved preset chips disappeared, and (2) selected filters stopped filtering (chips showed "2 odabrano" but all 756 listings returned unfiltered).
+- **Root cause**: The "restore complete" guard was a `useRef` (`filtersRestoredRef` / `initialized`). The restore effect mutated `ref.current = true` synchronously, and the persist/save effect — running in the **same commit** — then read `true` and wrote the render's *stale default* state over the freshly-read saved data in localStorage. Under React StrictMode (dev) the double effect pass re-read the already-corrupted localStorage, permanently wiping filters to defaults and desyncing state from the fetch.
+- **Fix**: Replaced the `useRef` guard with a **state** flag (`filtersRestored` / `loaded`). State is captured per-render in each effect's closure, so the persist/save effect reliably sees `false` on the first commit and only writes after the restored values are committed.
+  - `Dashboard.tsx`: `filtersRestored` state; persist effect `if (!filtersRestored) return;` with deps `[filtersRestored, getCurrentFilters]`. Removed now-unused `useRef` import.
+  - `useFilterPresets.ts`: `loaded` state; save effect `if (!loaded) return;` with deps `[loaded, presets]`. Removed `useRef` import.
+- **Lesson**: For "skip persistence until hydrated/restored" guards, use `useState`, not `useRef`. A ref mutated inside one effect is visible to sibling effects in the same commit, causing stale-value writes; a state flag is closure-scoped per render and avoids the race (also correct under StrictMode double-invoke).
+
 ---
 
 ## [2026-07-01] Notification Filters Tab (WhatsApp alerts per saved filter rule)

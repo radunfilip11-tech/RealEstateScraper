@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { FilterState, FilterPreset } from '@/lib/supabase/types';
 
 const PRESETS_KEY = 'nekretnine_filter_presets';
@@ -48,18 +48,19 @@ function saveToStorage(key: string, value: unknown) {
 export function useFilterPresets() {
   const [presets, setPresets] = useState<FilterPreset[]>([]);
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
-  const initialized = useRef(false);
+  // State (not ref): the save effect must see `loaded === false` in its first-commit
+  // closure so it doesn't overwrite stored presets with the initial empty array.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     setPresets(loadFromStorage<FilterPreset[]>(PRESETS_KEY, []));
-    initialized.current = true;
+    setLoaded(true);
   }, []);
 
   useEffect(() => {
-    if (initialized.current) {
-      saveToStorage(PRESETS_KEY, presets);
-    }
-  }, [presets]);
+    if (!loaded) return;
+    saveToStorage(PRESETS_KEY, presets);
+  }, [loaded, presets]);
 
   const savePreset = useCallback(
     (name: string, filters: FilterState) => {

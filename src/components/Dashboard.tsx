@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Listing, FilterState } from "@/lib/supabase/types";
 import { PROPERTY_TYPES, ADVERTISER_TYPES, SOURCES, TRANSACTION_TYPES, LISTING_STATUSES } from "@/lib/supabase/types";
@@ -47,7 +47,9 @@ export default function Dashboard() {
   const [dateFrom, setDateFrom] = useState<string>(DEFAULT_FILTERS.dateFrom);
   const [dateTo, setDateTo] = useState<string>(DEFAULT_FILTERS.dateTo);
   const [dateField, setDateField] = useState<"published_at" | "created_at">(DEFAULT_FILTERS.dateField);
-  const filtersRestoredRef = useRef(false);
+  // State (not ref) so the persist effect's closure reliably sees `false` on the
+  // first commit and doesn't overwrite saved localStorage with defaults.
+  const [filtersRestored, setFiltersRestored] = useState(false);
 
   // Saved filter presets
   const {
@@ -136,15 +138,14 @@ export default function Dashboard() {
       setDateTo(saved.dateTo);
       setDateField(saved.dateField);
     }
-    filtersRestoredRef.current = true;
+    setFiltersRestored(true);
   }, []);
 
   // Auto-persist last used filters to localStorage (skip until restore is done)
   useEffect(() => {
-    if (filtersRestoredRef.current) {
-      persistLastFilters(getCurrentFilters());
-    }
-  }, [getCurrentFilters]);
+    if (!filtersRestored) return;
+    persistLastFilters(getCurrentFilters());
+  }, [filtersRestored, getCurrentFilters]);
 
   // Apply a filter preset or snapshot
   const applyFilters = useCallback((f: FilterState) => {
