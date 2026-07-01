@@ -1,5 +1,35 @@
 # Development Log
 
+## [2026-07-01] Add Sorting by Published Date
+
+### 16. New Sort Options: Published Date from Website
+- **Files**: `src/app/api/listings/route.ts`, `src/components/Dashboard.tsx`
+- **Feature**: Added two new sort options that use `published_at` (the actual publication date from the website) instead of `created_at` (when the ad was scraped).
+- **Implementation**:
+  - API route: Added `published_newest` and `published_oldest` cases that order by `published_at` with `nullsFirst: false`
+  - Dashboard: Added "Najnovije objavljeno (na sajtu)" and "Najstarije objavljeno (na sajtu)" options to the sort dropdown
+  - Updated existing options to clarify "(skraperano)" vs "(na sajtu)"
+- **Data Source**: `published_at` is extracted from `<time datetime="...">` elements on both search results pages and detail pages (lines 201-206 and 360-365 in `njuskalo.ts`)
+- **Why**: Allows users to see which ads were most recently published by sellers on the website, not just which ones were most recently discovered by the scraper. More useful for catching brand new listings.
+
+---
+
+## [2026-07-01] Fix HTTP 403 on Detail Pages — Switch to Playwright
+
+### 15. Detail Page Fetches Now Use Playwright (not HTTP)
+- **Files**: `src/lib/scraper/njuskalo.ts`, `scripts/monitor.ts`
+- **Problem**: After several days of scraping, ShieldSquare started returning HTTP 403 on detail page fetches made with raw `fetch()` + stolen cookies.
+- **Root Cause**: ShieldSquare detected the fingerprint mismatch — search pages had full browser JS execution, detail pages were raw HTTP without browser fingerprint.
+- **Fix**: 
+  - Added `fetchDetailPagePlaywright()` function that uses the existing Playwright page to navigate to detail pages
+  - Replaced `fetchDetailPageHTTP()` calls in monitor with `fetchDetailPagePlaywright()`
+  - Increased detail page delay from 500-1400ms to 1500-3000ms (human-like)
+  - Added `blocked` detection on detail pages — if ShieldSquare triggers, stops detail fetches and restarts browser
+- **Tradeoff**: ~10x slower per detail page (~3s vs ~200ms), but reliable. Cycle time with 20 new ads increases from ~65s to ~140s.
+- **Lesson**: Raw HTTP fetch with stolen cookies is a temporary bypass. ShieldSquare's behavioral analysis eventually detects the pattern (browser for search, HTTP for detail). Use Playwright for all page loads.
+
+---
+
 ## [2026-07-01] Night Shift Pacing, Worker Rebalance & Ads-by-Hour Stats *(uncommitted)*
 
 ### 11. Adaptive Minimum Cycle Duration (per worker + time of day)

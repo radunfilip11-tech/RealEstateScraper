@@ -62,7 +62,7 @@ src/
 - **Renewed Listings (Obnovljen)**: Instead of parsing unreliable UI badges, detect "renewed" listings via database age. If a scraped listing's `external_id` is already in the DB but is older than 12 hours, update its `status` to `Obnovljen` and refresh its `created_at` timestamp.
 
 ## Advanced Scraping & Scaling Strategy
-- **Fast Private Ad Detection**: "Korisnik nije trgovac" (Private Ad indicator) only exists on detail pages. To keep scraping fast without getting banned, the scraper uses Playwright to load the search page, extracts the new listing URLs, grabs the active session cookies, and then uses pure HTTP `fetch` to grab the HTML of the detail pages (skipping JS/CSS rendering).
+- **Private Ad Detection via Playwright**: "Korisnik nije trgovac" (Private Ad indicator) only exists on detail pages. The scraper uses Playwright for BOTH search and detail pages (HTTP fetch with stolen cookies was blocked by ShieldSquare after extended use due to fingerprint mismatch). Detail page fetches use 1.5-3s delays to appear human-like.
 - **Duplicate Detection & Skip Logic**: The monitor loads `external_id`s from both `listings` (private ads) and `seen_listings` (agency ads) at cycle start into a `knownIds` Set. Only ads NOT in `knownIds` trigger detail-page fetches. After checking, private ads go to `listings`, agency ads go to `seen_listings` for future skip tracking.
 - **Live Monitor Dashboard**: Use Supabase Realtime to stream newly discovered private ads directly into the frontend UI instantly.
 - **Scaling to Multiple Sites (10+)**: A "Distributed Fleet" architecture is recommended — deploy lightweight worker apps on separate VPS instances per site/category group to avoid IP rate-limiting.

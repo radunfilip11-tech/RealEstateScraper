@@ -14,6 +14,12 @@ export async function GET(request: Request) {
     case "oldest":
       query = query.order("created_at", { ascending: true });
       break;
+    case "published_newest":
+      query = query.order("published_at", { ascending: false, nullsFirst: false });
+      break;
+    case "published_oldest":
+      query = query.order("published_at", { ascending: true, nullsFirst: false });
+      break;
     case "price_asc":
       query = query.order("price_numeric", { ascending: true, nullsFirst: false });
       break;

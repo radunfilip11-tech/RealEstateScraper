@@ -645,6 +645,9 @@ export async function scrapeSearchPageOnly(
  * Fetch a detail page using raw HTTP fetch with stolen Playwright cookies.
  * ~10x faster than navigating Playwright to the page.
  * Returns the parsed detail data including advertiser type.
+ * 
+ * @deprecated Use fetchDetailPagePlaywright instead - HTTP fetch is now
+ * blocked by ShieldSquare's fingerprint detection after extended use.
  */
 export async function fetchDetailPageHTTP(
   url: string,
@@ -673,4 +676,56 @@ export async function fetchDetailPageHTTP(
 
   const html = await response.text();
   return parseDetailPageHTML(html);
+}
+
+/**
+ * Fetch a detail page using Playwright browser navigation.
+ * Slower than HTTP fetch (~3s vs ~200ms) but reliable against ShieldSquare
+ * bot protection which requires JavaScript execution.
+ * 
+ * @param page - Playwright page instance (must be from an existing context)
+ * @param url - Full URL of the detail page to fetch
+ * @returns Parsed detail data + blocked flag if ShieldSquare detected
+ */
+export async function fetchDetailPagePlaywright(
+  page: any,
+  url: string
+): Promise<ReturnType<typeof parseDetailPageHTML> & { blocked: boolean }> {
+  try {
+    await page.goto(url, {
+      waitUntil: "domcontentloaded",
+      timeout: 25000,
+    });
+
+    // Check for bot protection
+    const title = await page.title();
+    if (title.includes("ShieldSquare") || title.includes("Captcha")) {
+      console.error(`[Scraper] Bot protection detected on detail page: ${url}`);
+      return {
+        price: null,
+        priceNumeric: null,
+        location: null,
+        locationCounty: null,
+        locationCity: null,
+        locationNeighborhood: null,
+        sizeM2: null,
+        advertiserType: null,
+        isPromoted: false,
+        publishedAt: null,
+        blocked: true,
+      };
+    }
+
+    // Small delay for any dynamic content to settle
+    await randomDelay(200, 400);
+
+    const html = await page.content();
+    const detail = parseDetailPageHTML(html);
+
+    return { ...detail, blocked: false };
+  } catch (err) {
+    // Re-throw with more context
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Playwright detail fetch failed for ${url}: ${message}`);
+  }
 }

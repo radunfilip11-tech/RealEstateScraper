@@ -8,6 +8,7 @@ import StatsBar from "@/components/ui/StatsBar";
 import SearchBar from "@/components/ui/SearchBar";
 import FilterDropdown from "@/components/ui/FilterDropdown";
 import RangeFilter from "@/components/ui/RangeFilter";
+import DateRangeFilter from "@/components/ui/DateRangeFilter";
 import LocationFilterDropdown from "@/components/ui/LocationFilterDropdown";
 import ListingCard from "@/components/ui/ListingCard";
 export default function Dashboard() {
@@ -36,6 +37,9 @@ export default function Dashboard() {
   const [sizeMin, setSizeMin] = useState<number | null>(null);
   const [sizeMax, setSizeMax] = useState<number | null>(null);
   const [sort, setSort] = useState<string>("newest");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [dateField, setDateField] = useState<"published_at" | "created_at">("published_at");
 
   // All known locations for the autocomplete dropdown
   const [allLocations, setAllLocations] = useState<
@@ -72,6 +76,8 @@ export default function Dashboard() {
       // Apply sorting
       if (sort === "newest") query = query.order("created_at", { ascending: false });
       else if (sort === "oldest") query = query.order("created_at", { ascending: true });
+      else if (sort === "published_newest") query = query.order("published_at", { ascending: false, nullsFirst: false });
+      else if (sort === "published_oldest") query = query.order("published_at", { ascending: true, nullsFirst: false });
       else if (sort === "price_asc") query = query.order("price_numeric", { ascending: true });
       else if (sort === "price_desc") query = query.order("price_numeric", { ascending: false });
 
@@ -125,6 +131,14 @@ export default function Dashboard() {
         query = query.lte("size_m2", sizeMax);
       }
 
+      // Apply date/time range filter
+      if (dateFrom) {
+        query = query.gte(dateField, new Date(dateFrom).toISOString());
+      }
+      if (dateTo) {
+        query = query.lte(dateField, new Date(dateTo).toISOString());
+      }
+
       const { data, error } = await query.limit(1000);
 
       if (error) {
@@ -153,6 +167,9 @@ export default function Dashboard() {
     sizeMin,
     sizeMax,
     sort,
+    dateFrom,
+    dateTo,
+    dateField,
   ]);
 
   useEffect(() => {
@@ -209,6 +226,7 @@ export default function Dashboard() {
     selectedAdvertiserTypes.length > 0,
     priceMin !== null || priceMax !== null,
     sizeMin !== null || sizeMax !== null,
+    dateFrom !== "" || dateTo !== "",
   ].filter(Boolean).length;
 
   const clearAllFilters = () => {
@@ -223,6 +241,9 @@ export default function Dashboard() {
     setPriceMax(null);
     setSizeMin(null);
     setSizeMax(null);
+    setDateFrom("");
+    setDateTo("");
+    setDateField("published_at");
     setSort("newest");
   };
 
@@ -472,6 +493,14 @@ export default function Dashboard() {
           onMinChange={setSizeMin}
           onMaxChange={setSizeMax}
         />
+        <DateRangeFilter
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          dateField={dateField}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+          onDateFieldChange={setDateField}
+        />
         
         <div className="flex items-center gap-2 ml-auto">
           <label className="text-sm text-gray-600 flex items-center gap-2 cursor-pointer">
@@ -493,8 +522,10 @@ export default function Dashboard() {
             onChange={(e) => setSort(e.target.value)}
             className="text-sm bg-white border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-shadow"
           >
-            <option value="newest">Najnovije dodano</option>
-            <option value="oldest">Najstarije dodano</option>
+            <option value="newest">Najnovije dodano (skenirano)</option>
+            <option value="oldest">Najstarije dodano (skenirano)</option>
+            <option value="published_newest">Najnovije objavljeno (na sajtu)</option>
+            <option value="published_oldest">Najstarije objavljeno (na sajtu)</option>
             <option value="price_asc">Najjeftinije</option>
             <option value="price_desc">Najskuplje</option>
           </select>

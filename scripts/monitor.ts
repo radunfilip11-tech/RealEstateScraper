@@ -31,7 +31,7 @@ import {
   WORKER_CATEGORIES,
   NJUSKALO_BASE,
   scrapeSearchPageOnly,
-  fetchDetailPageHTTP,
+  fetchDetailPagePlaywright,
   randomDelay,
 } from "../src/lib/scraper/njuskalo";
 
@@ -79,8 +79,8 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const CATEGORY_DELAY_MS = { min: 1600, max: 2600 }; // 1.6-2.3s between categories
-const CYCLE_REST_MS = { min: 1600, max: 3500 };    // 1.4-2.3s rest between full cycles
+const CATEGORY_DELAY_MS = { min: 2000, max: 3600 }; // 1.6-2.3s between categories
+const CYCLE_REST_MS = { min: 2000, max: 6500 };    // 1.4-2.3s rest between full cycles
 const BLOCKED_BACKOFF_MS = 600000;                 // 10 min backoff if blocked
 
 const USER_AGENTS = [
@@ -307,20 +307,26 @@ async function runMonitor() {
 
           await dbLog(`[${category}] 🆕 ${uniqueNewListings.length} NEW ads detected on page 1! Checking details...`, "info");
 
-          // Extract cookies from the Playwright session for fast HTTP fetches
-          const cookies = await context.cookies();
           const privateListingsToSave = [];
           const seenListingsToSave = [];
+          let detailBlocked = false;
 
-          // Fetch detail pages for each new ad using fast HTTP
+          // Fetch detail pages using Playwright (reliable against ShieldSquare)
           for (const listing of uniqueNewListings) {
             if (!listing.url) continue;
 
             try {
-              // Small delay between detail fetches to not look like a bot
-              await randomDelay(500, 1400);
+              // Human-like delay between detail page visits (1.5-3s)
+              await randomDelay(1500, 3000);
 
-              const detail = await fetchDetailPageHTTP(listing.url, cookies, userAgent);
+              const detail = await fetchDetailPagePlaywright(page, listing.url);
+
+              // Check if bot protection was triggered on detail page
+              if (detail.blocked) {
+                await dbLog(`[${category}] ⚠️ BLOCKED on detail page! Stopping detail fetches for this cycle.`, "error");
+                detailBlocked = true;
+                break;
+              }
 
               // Enrich the listing with detail page data
               if (detail.price) {
@@ -372,6 +378,11 @@ async function runMonitor() {
 
             // Mark this ID as known so we don't re-process it in subsequent categories
             knownIds.add(listing.external_id);
+          }
+
+          // If blocked on detail pages, trigger browser restart like search page block
+          if (detailBlocked) {
+            blocked = true;
           }
 
           // Save ONLY private listings to the main listings table
@@ -446,31 +457,79 @@ async function runMonitor() {
     // Rest between full cycles
     if (!shuttingDown) {
       let rest = CYCLE_REST_MS.min + Math.floor(Math.random() * (CYCLE_REST_MS.max - CYCLE_REST_MS.min));
-      
+
       const croatiaTime = new Date().toLocaleString("en-US", { timeZone: "Europe/Zagreb" });
       const croatiaHour = new Date(croatiaTime).getHours();
       // "Night shift" from 1 AM to 6 AM (Assuming '1pm' was a typo, using 1 to 6)
       const isNightShift = croatiaHour >= 1 && croatiaHour < 6;
 
       let targetDuration = 60;
+      let threshold = 60; // For log message in day mode
+
       if (isNightShift) {
+        // Night mode: Keep current long delays to avoid bot detection during low traffic
         if (WORKER_ID === 1) {
           targetDuration = 480 + Math.floor(Math.random() * 120); // 8 to 10 mins
         } else if (WORKER_ID === 2) {
           targetDuration = 1200 + Math.floor(Math.random() * 300); // 20 to 25 mins
         }
       } else {
+        // Day mode: Graduated sliding-scale approach
+        let targetMin, targetMax;
+
         if (WORKER_ID === 1) {
-          targetDuration = 100 + Math.floor(Math.random() * 151); // random between 100s and 250s
+          if (cycleDuration < 35) {
+            // Very fast cycle: aggressive penalty
+            threshold = 35;
+            targetMin = 120;
+            targetMax = 200;
+          } else if (cycleDuration < 60) {
+            // Somewhat fast cycle: moderate penalty
+            threshold = 60;
+            targetMin = 90;
+            targetMax = 140;
+          } else {
+            // Natural pace: no penalty
+            threshold = 60;
+            targetDuration = cycleDuration;
+          }
         } else if (WORKER_ID === 2) {
-          targetDuration = 200 + Math.floor(Math.random() * 301); // random between 200s and 500s
+          if (cycleDuration < 120) {
+            // Very fast cycle: aggressive penalty
+            threshold = 120;
+            targetMin = 300;
+            targetMax = 360;
+          } else if (cycleDuration < 240) {
+            // Somewhat fast cycle: moderate penalty
+            threshold = 240;
+            targetMin = 240;
+            targetMax = 300;
+          } else {
+            // Natural pace: no penalty
+            threshold = 240;
+            targetDuration = cycleDuration;
+          }
+        } else {
+          // Fallback for other workers
+          threshold = 60;
+          if (cycleDuration < 60) {
+            targetMin = 60;
+            targetMax = 90;
+          } else {
+            targetDuration = cycleDuration;
+          }
+        }
+
+        // Apply random target if not already set to cycleDuration
+        if (targetMin !== undefined && targetMax !== undefined) {
+          targetDuration = targetMin + Math.floor(Math.random() * (targetMax - targetMin + 1));
         }
       }
 
       if (cycleDuration < targetDuration) {
         const extraWait = (targetDuration - cycleDuration) * 1000;
         rest += extraWait;
-        const msgType = isNightShift ? "Night shift active" : "Fast cycle detected";
+        const msgType = isNightShift ? "Night shift active" : `Fast cycle (< ${threshold}s)`;
         await dbLog(`${msgType} (cycle took ${cycleDuration}s). Enforcing ${targetDuration}s minimum cycle duration. Adding ${Math.round(extraWait / 1000)}s wait.`, "warning");
       }
 
