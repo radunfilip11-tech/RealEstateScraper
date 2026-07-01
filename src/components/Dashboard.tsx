@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Listing, FilterState } from "@/lib/supabase/types";
 import { PROPERTY_TYPES, ADVERTISER_TYPES, SOURCES, TRANSACTION_TYPES, LISTING_STATUSES } from "@/lib/supabase/types";
@@ -169,8 +169,13 @@ export default function Dashboard() {
     setDateField(f.dateField);
   }, []);
 
+  const latestFetchId = useRef<number>(0);
+
   // Fetch listings from Supabase
   const fetchListings = useCallback(async () => {
+    const fetchId = Date.now() + Math.random();
+    latestFetchId.current = fetchId;
+
     setLoading(true);
     try {
       const supabase = getSupabaseBrowserClient();
@@ -244,15 +249,20 @@ export default function Dashboard() {
 
       const { data, error } = await query.limit(1000);
 
+      if (latestFetchId.current !== fetchId) return;
+
       if (error) {
         console.error("Error fetching listings:", error);
       } else {
         setListings(data || []);
       }
     } catch (err) {
+      if (latestFetchId.current !== fetchId) return;
       console.error("Fetch error:", err);
     } finally {
-      setLoading(false);
+      if (latestFetchId.current === fetchId) {
+        setLoading(false);
+      }
     }
   }, [
     search,
@@ -276,8 +286,9 @@ export default function Dashboard() {
   ]);
 
   useEffect(() => {
+    if (!filtersRestored) return;
     fetchListings();
-  }, [fetchListings]);
+  }, [fetchListings, filtersRestored]);
 
   // Trigger scrape
   const handleScrape = async () => {

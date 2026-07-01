@@ -5,6 +5,7 @@ import type { FilterState, FilterPreset } from '@/lib/supabase/types';
 
 const PRESETS_KEY = 'nekretnine_filter_presets';
 const LAST_FILTERS_KEY = 'nekretnine_last_filters';
+const ACTIVE_PRESET_KEY = 'nekretnine_active_preset_id';
 
 export const DEFAULT_FILTERS: FilterState = {
   search: '',
@@ -54,13 +55,15 @@ export function useFilterPresets() {
 
   useEffect(() => {
     setPresets(loadFromStorage<FilterPreset[]>(PRESETS_KEY, []));
+    setActivePresetId(loadFromStorage<string | null>(ACTIVE_PRESET_KEY, null));
     setLoaded(true);
   }, []);
 
   useEffect(() => {
     if (!loaded) return;
     saveToStorage(PRESETS_KEY, presets);
-  }, [loaded, presets]);
+    saveToStorage(ACTIVE_PRESET_KEY, activePresetId);
+  }, [loaded, presets, activePresetId]);
 
   const savePreset = useCallback(
     (name: string, filters: FilterState) => {

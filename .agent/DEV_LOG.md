@@ -1,5 +1,20 @@
 # Development Log
 
+## [2026-07-01] Fix Filter Race Condition and Active Preset Persistence
+
+### 21. Fix fetchListings race condition on Dashboard remount
+- **Files**: `src/components/Dashboard.tsx`
+- **Symptoms**: "When I switch back from some tab, after a half a second it goes back to no filters although the filters are selected."
+- **Root cause**: When the `Dashboard` component unmounted and remounted, it fired an initial `fetchListings()` with default/empty filters (which took a long time). Immediately after, `useEffect` restored the saved filters and fired a second `fetchListings()` (which was fast). The fast filtered query completed first, but then the slow unfiltered query completed and overwrote the listings array with unfiltered data.
+- **Fix**: 
+  - Added `latestFetchId` (using `useRef`) to track the most recent network request and discard stale responses.
+  - Added a `filtersRestored` check to the `useEffect` that calls `fetchListings` to prevent the initial unfiltered fetch from happening at all, saving a network request and completely eliminating the race condition.
+
+### 22. Fix active preset chip highlight disappearing on tab switch
+- **Files**: `src/hooks/useFilterPresets.ts`
+- **Symptoms**: "...and the saved filters are not there anymore." (The preset chips were visible but the green highlight indicating the active preset was gone).
+- **Root cause**: `activePresetId` was kept only in React state (`useState`) and never persisted to `localStorage`, so when the component unmounted and remounted, it initialized back to `null`.
+- **Fix**: Added `ACTIVE_PRESET_KEY` (`nekretnine_active_preset_id`) to `localStorage`. `activePresetId` is now loaded on mount and auto-saved alongside `presets`.
 ## [2026-07-01] Saved Filter Presets & Last-Used Filter Persistence
 
 ### 18. Filter presets with localStorage persistence
