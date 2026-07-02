@@ -535,6 +535,28 @@ async function runMonitor() {
 
       await dbLog(`Resting ${Math.round(rest / 1000)}s before next cycle...\n`, "info");
       await new Promise((resolve) => setTimeout(resolve, rest));
+
+      // Periodic Browser Restart (every 50 cycles) to prevent fingerprint accumulation
+      if (totalCycles > 0 && totalCycles % 50 === 0) {
+        await dbLog(`[Periodic Restart] Reached ${totalCycles} cycles. Restarting browser to reset fingerprint...`, "info");
+        try { await context.close(); } catch { /* ignore */ }
+        try { await browser.close(); } catch { /* ignore */ }
+
+        const newUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+        browser = await chromium.launch({
+          headless: true,
+          args: ["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-setuid-sandbox"],
+        });
+        context = await browser.newContext({
+          locale: "hr-HR",
+          timezoneId: "Europe/Zagreb",
+          userAgent: newUA,
+          viewport: { width: 1920, height: 1080 },
+          extraHTTPHeaders: { "Accept-Language": "hr-HR,hr;q=0.9,en-US;q=0.8,en;q=0.7" },
+        });
+        page = await context.newPage();
+        await dbLog(`Browser restarted with new UA: ${newUA.substring(0, 50)}...`, "info");
+      }
     }
   }
 }

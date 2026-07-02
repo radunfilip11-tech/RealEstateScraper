@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import TimeInput from "@/components/ui/TimeInput";
 
 interface DateRangeFilterProps {
   dateFrom: string;
@@ -42,6 +43,46 @@ export default function DateRangeFilter({
     return `${fieldLabel} ${from} – ${to}`;
   };
 
+  const setShortcut = (daysBackStart: number, daysBackEnd: number = 0) => {
+    const today = new Date();
+    
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - daysBackStart);
+    const startY = startDate.getFullYear();
+    const startM = String(startDate.getMonth() + 1).padStart(2, "0");
+    const startD = String(startDate.getDate()).padStart(2, "0");
+
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() - daysBackEnd);
+    const endY = endDate.getFullYear();
+    const endM = String(endDate.getMonth() + 1).padStart(2, "0");
+    const endD = String(endDate.getDate()).padStart(2, "0");
+
+    onDateFromChange(`${startY}-${startM}-${startD}T00:00`);
+    onDateToChange(`${endY}-${endM}-${endD}T23:59`);
+  };
+
+  const handleDateTimeChange = (type: "from" | "to", datePart: string, timePart: string) => {
+    if (!datePart) {
+      if (type === "from") onDateFromChange("");
+      else onDateToChange("");
+      return;
+    }
+    const val = `${datePart}T${timePart || "00:00"}`;
+    if (type === "from") onDateFromChange(val);
+    else onDateToChange(val);
+  };
+
+  const fromDate = dateFrom ? dateFrom.split("T")[0] : "";
+  const fromTime =
+    dateFrom && dateFrom.includes("T")
+      ? dateFrom.split("T")[1].slice(0, 5)
+      : "00:00";
+
+  const toDate = dateTo ? dateTo.split("T")[0] : "";
+  const toTime =
+    dateTo && dateTo.includes("T") ? dateTo.split("T")[1].slice(0, 5) : "23:59";
+
   return (
     <div ref={ref} className="relative" id="filter-date">
       <button
@@ -77,58 +118,103 @@ export default function DateRangeFilter({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1.5 w-80 bg-white border border-gray-200 rounded-xl shadow-lg z-50 p-4 animate-in fade-in slide-in-from-top-1 duration-150">
-          <div className="mb-3">
-            <label className="block text-[11px] text-gray-400 mb-1.5 font-medium">
-              Filtriraj prema
+        <div className="absolute top-full mt-2 left-0 w-[380px] bg-white border border-gray-200 rounded-xl shadow-2xl z-50 p-5 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-sm font-semibold text-gray-800">Filtriraj po datumu</h3>
+            {hasValue && (
+              <button
+                onClick={() => {
+                  onDateFromChange("");
+                  onDateToChange("");
+                }}
+                className="text-xs font-medium text-red-500 hover:text-red-600 transition-colors bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-md"
+              >
+                Očisti sve
+              </button>
+            )}
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-xs text-gray-500 mb-1.5 font-medium">
+              Polje za filtriranje
             </label>
             <select
               value={dateField}
               onChange={(e) => onDateFieldChange(e.target.value as "published_at" | "created_at")}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 bg-gray-50/50"
             >
               <option value="published_at">Datum objave (na sajtu)</option>
               <option value="created_at">Datum skeniranja</option>
             </select>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <label className="block text-[11px] text-gray-400 mb-1 font-medium">
-                Od
-              </label>
-              <input
-                type="datetime-local"
-                value={dateFrom}
-                onChange={(e) => onDateFromChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
-              />
-            </div>
-            <span className="text-gray-300 mt-5">–</span>
-            <div className="flex-1">
-              <label className="block text-[11px] text-gray-400 mb-1 font-medium">
-                Do
-              </label>
-              <input
-                type="datetime-local"
-                value={dateTo}
-                onChange={(e) => onDateToChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
-              />
+          <div className="mb-5">
+            <label className="block text-xs text-gray-500 mb-2 font-medium">
+              Brzi odabir
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShortcut(0)}
+                className="flex-1 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 rounded-md transition-colors"
+              >
+                Danas
+              </button>
+              <button
+                onClick={() => setShortcut(1, 1)}
+                className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md transition-colors"
+              >
+                Jučer
+              </button>
+              <button
+                onClick={() => setShortcut(7, 0)}
+                className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md transition-colors"
+              >
+                Zadnjih 7
+              </button>
             </div>
           </div>
 
-          {hasValue && (
-            <button
-              onClick={() => {
-                onDateFromChange("");
-                onDateToChange("");
-              }}
-              className="mt-3 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              Očisti
-            </button>
-          )}
+          <div className="flex flex-col gap-4">
+            {/* OD */}
+            <div className="p-3 bg-gray-50/50 border border-gray-100 rounded-lg">
+              <label className="block text-xs text-emerald-600 mb-2 font-semibold uppercase tracking-wider">
+                Početak (Od)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => handleDateTimeChange("from", e.target.value, fromTime)}
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                />
+                <TimeInput
+                  value={fromTime}
+                  onChange={(time) => handleDateTimeChange("from", fromDate, time)}
+                  accent="emerald"
+                />
+              </div>
+            </div>
+
+            {/* DO */}
+            <div className="p-3 bg-gray-50/50 border border-gray-100 rounded-lg">
+              <label className="block text-xs text-rose-600 mb-2 font-semibold uppercase tracking-wider">
+                Kraj (Do)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => handleDateTimeChange("to", e.target.value, toTime)}
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400"
+                />
+                <TimeInput
+                  value={toTime}
+                  onChange={(time) => handleDateTimeChange("to", toDate, time)}
+                  accent="rose"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

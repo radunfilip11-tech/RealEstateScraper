@@ -1,5 +1,13 @@
 # Development Log
 
+## [2026-07-02] Fingerprint Reset via Periodic Browser Restart
+
+### 23. Periodic Browser Restart to Prevent Fingerprint Accumulation
+- **Files**: `scripts/monitor.ts`
+- **Symptoms**: After ~9-10 hours of running, Worker 1 was hitting ShieldSquare blocks on detail page fetches during peak morning hours (due to higher volume of new listings).
+- **Fix**: Added a check at the end of each cycle in the main monitor loop. Every 50 cycles (`totalCycles % 50 === 0`), it gracefully closes the Playwright context and browser instance, restarts it with a new randomized User-Agent, and launches a fresh context. This resets cookies and session storage state to avoid heuristic fingerprint detection.
+- **Why**: Keeps the browser session fresh and breaks up fingerprint flags without waiting for a ShieldSquare block to trigger a restart.
+
 ## [2026-07-01] Fix Filter Race Condition and Active Preset Persistence
 
 ### 21. Fix fetchListings race condition on Dashboard remount
