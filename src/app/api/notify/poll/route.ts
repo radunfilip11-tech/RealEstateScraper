@@ -43,23 +43,21 @@ function listingMatchesFilter(
     return false;
   }
 
-  if (
-    filter.location_counties.length > 0 &&
-    !filter.location_counties.includes(listing.location_county ?? "")
-  ) {
-    return false;
-  }
-  if (
-    filter.location_cities.length > 0 &&
-    !filter.location_cities.includes(listing.location_city ?? "")
-  ) {
-    return false;
-  }
-  if (
-    filter.location_neighborhoods.length > 0 &&
-    !filter.location_neighborhoods.includes(listing.location_neighborhood ?? "")
-  ) {
-    return false;
+  // Location matching: If ANY location filters are set, the listing must match AT LEAST ONE (OR logic).
+  // This allows selecting e.g. City "Split" + Neighborhood "Kaštel Stari" and getting results for both.
+  const hasLocationFilters = 
+    filter.location_counties.length > 0 ||
+    filter.location_cities.length > 0 ||
+    filter.location_neighborhoods.length > 0;
+
+  if (hasLocationFilters) {
+    const matchesCounty = filter.location_counties.includes(listing.location_county ?? "");
+    const matchesCity = filter.location_cities.includes(listing.location_city ?? "");
+    const matchesNeighborhood = filter.location_neighborhoods.includes(listing.location_neighborhood ?? "");
+    
+    if (!matchesCounty && !matchesCity && !matchesNeighborhood) {
+      return false;
+    }
   }
 
   if (

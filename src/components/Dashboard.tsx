@@ -203,14 +203,19 @@ export default function Dashboard() {
       if (selectedPropertyTypes.length > 0) {
         query = query.in("property_type", selectedPropertyTypes);
       }
+      // Apply location filters using OR logic
+      const locationConditions = [];
       if (selectedCounties.length > 0) {
-        query = query.in("location_county", selectedCounties);
+        locationConditions.push(`location_county.in.(${selectedCounties.join(',')})`);
       }
       if (selectedCities.length > 0) {
-        query = query.in("location_city", selectedCities);
+        locationConditions.push(`location_city.in.(${selectedCities.join(',')})`);
       }
       if (selectedNeighborhoods.length > 0) {
-        query = query.in("location_neighborhood", selectedNeighborhoods);
+        locationConditions.push(`location_neighborhood.in.(${selectedNeighborhoods.join(',')})`);
+      }
+      if (locationConditions.length > 0) {
+        query = query.or(locationConditions.join(','));
       }
       if (selectedTransactionTypes.length > 0) {
         query = query.in("transaction_type", selectedTransactionTypes);

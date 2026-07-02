@@ -12,9 +12,13 @@
 
 import { config } from "dotenv";
 config({ path: ".env.local" });
+import * as fs from "fs";
+import * as path from "path";
 import { getSupabaseServerClient } from "../src/lib/supabase/server";
 import { sendAgentNotification } from "../src/lib/notifications/telegram";
 import type { Listing, NotificationFilter } from "../src/lib/supabase/types";
+
+const PID_FILE = path.resolve(__dirname, "../notify-poll.pid");
 
 function listingMatchesFilter(
   listing: Listing,
@@ -39,21 +43,21 @@ function listingMatchesFilter(
     return false;
   if (filter.statuses.length > 0 && !filter.statuses.includes(listing.status))
     return false;
-  if (
-    filter.location_counties.length > 0 &&
-    !filter.location_counties.includes(listing.location_county ?? "")
-  )
-    return false;
-  if (
-    filter.location_cities.length > 0 &&
-    !filter.location_cities.includes(listing.location_city ?? "")
-  )
-    return false;
-  if (
-    filter.location_neighborhoods.length > 0 &&
-    !filter.location_neighborhoods.includes(listing.location_neighborhood ?? "")
-  )
-    return false;
+  // Location matching: If ANY location filters are set, the listing must match AT LEAST ONE (OR logic).
+  const hasLocationFilters = 
+    filter.location_counties.length > 0 ||
+    filter.location_cities.length > 0 ||
+    filter.location_neighborhoods.length > 0;
+
+  if (hasLocationFilters) {
+    const matchesCounty = filter.location_counties.includes(listing.location_county ?? "");
+    const matchesCity = filter.location_cities.includes(listing.location_city ?? "");
+    const matchesNeighborhood = filter.location_neighborhoods.includes(listing.location_neighborhood ?? "");
+    
+    if (!matchesCounty && !matchesCity && !matchesNeighborhood) {
+      return false;
+    }
+  }
   if (
     filter.price_min !== null &&
     (listing.price_numeric === null || listing.price_numeric < filter.price_min)
@@ -180,6 +184,9 @@ async function main() {
     return;
   }
 
+  // Write PID file
+  fs.writeFileSync(PID_FILE, process.pid.toString(), "utf-8");
+
   console.log(
     `[notify-poll] Starting continuous poller (interval: ${intervalMin} min). Ctrl+C to stop.`,
   );
@@ -187,18 +194,41 @@ async function main() {
   const shutdown = () => {
     console.log("\n[notify-poll] Shutdown requested, exiting...");
     running = false;
+    if (fs.existsSync(PID_FILE)) {
+      try { fs.unlinkSync(PID_FILE); } catch {}
+    }
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
   while (running) {
+    // Check if PID file was deleted by the UI / Control API
+    if (!fs.existsSync(PID_FILE)) {
+      console.log("[notify-poll] PID file missing. Control API requested shutdown.");
+      shutdown();
+      break;
+    }
+
     try {
       await pollOnce();
     } catch (err) {
       console.error("[notify-poll] Cycle error:", err);
     }
     if (!running) break;
-    await new Promise((r) => setTimeout(r, intervalMin * 60 * 1000));
+    
+    // Check PID file multiple times during the wait so shutdown is fast
+    const waitMs = intervalMin * 60 * 1000;
+    const intervalCheck = 2000;
+    let elapsed = 0;
+    while (elapsed < waitMs && running) {
+      if (!fs.existsSync(PID_FILE)) {
+        console.log("[notify-poll] PID file missing during wait. Control API requested shutdown.");
+        shutdown();
+        break;
+      }
+      await new Promise((r) => setTimeout(r, intervalCheck));
+      elapsed += intervalCheck;
+    }
   }
 }
 

@@ -200,15 +200,81 @@ export default function LocationFilterDropdown({
 
           <div className="max-h-[320px] overflow-y-auto p-2">
             {totalSelected > 0 && (
-              <div className="px-2 pb-2 mb-2 border-b border-gray-100 flex justify-between items-center">
-                <span className="text-xs text-gray-500 font-medium">Odabrane lokacije: {totalSelected}</span>
-                <button
-                  type="button"
-                  onClick={clearAll}
-                  className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
-                >
-                  Očisti sve
-                </button>
+              <div className="px-2 pb-2 mb-2 border-b border-gray-100">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs text-gray-500 font-medium">
+                    Odabrane lokacije: {totalSelected}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearAll}
+                    className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                  >
+                    Očisti sve
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedCounties.map((county) => (
+                    <span
+                      key={`sel-county-${county}`}
+                      className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md"
+                    >
+                      <span className="truncate max-w-[180px]" title={county}>
+                        {county}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleCounty(county)}
+                        className="p-0.5 rounded hover:bg-emerald-100 transition-colors"
+                        aria-label={`Ukloni ${county}`}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </span>
+                  ))}
+                  {selectedCities.map((city) => (
+                    <span
+                      key={`sel-city-${city}`}
+                      className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md"
+                    >
+                      <span className="truncate max-w-[180px]" title={city}>
+                        {city}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleCity(city)}
+                        className="p-0.5 rounded hover:bg-emerald-100 transition-colors"
+                        aria-label={`Ukloni ${city}`}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </span>
+                  ))}
+                  {selectedNeighborhoods.map((neighborhood) => (
+                    <span
+                      key={`sel-neighborhood-${neighborhood}`}
+                      className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md"
+                    >
+                      <span className="truncate max-w-[180px]" title={neighborhood}>
+                        {neighborhood}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleNeighborhood(neighborhood)}
+                        className="p-0.5 rounded hover:bg-emerald-100 transition-colors"
+                        aria-label={`Ukloni ${neighborhood}`}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
 

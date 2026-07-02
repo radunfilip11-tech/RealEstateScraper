@@ -481,8 +481,8 @@ async function runMonitor() {
           if (cycleDuration < 35) {
             // Very fast cycle: aggressive penalty
             threshold = 35;
-            targetMin = 120;
-            targetMax = 200;
+            targetMin = 240;
+            targetMax = 390;
           } else if (cycleDuration < 60) {
             // Somewhat fast cycle: moderate penalty
             threshold = 60;
@@ -497,13 +497,13 @@ async function runMonitor() {
           if (cycleDuration < 120) {
             // Very fast cycle: aggressive penalty
             threshold = 120;
-            targetMin = 300;
-            targetMax = 360;
+            targetMin = 500;
+            targetMax = 760;
           } else if (cycleDuration < 240) {
             // Somewhat fast cycle: moderate penalty
             threshold = 240;
             targetMin = 240;
-            targetMax = 300;
+            targetMax = 350;
           } else {
             // Natural pace: no penalty
             threshold = 240;
