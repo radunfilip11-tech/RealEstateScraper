@@ -1,5 +1,16 @@
 # Development Log
 
+## [2026-07-08] Telegram Listing Numbering
+
+### 24. Numbering Telegram listings within notification batches
+- **Files**:
+  - `src/app/api/notify/poll/route.ts`
+  - `src/app/api/notify/route.ts`
+  - `scripts/notify-poll.ts`
+- **Goal**: Number each listing in Telegram notifications to make it easier to reference specific ads in conversation.
+- **Current Behavior**: Prepends a bold sequential counter `*#1*`, `*#2*`, etc. to the listings in each sent notification batch using the array index.
+- **Future Change Needed**: The numbering currently resets for each notification batch/message sent. It should instead count sequentially throughout the day (a daily counter) and reset at midnight. Since this requires database tracking or a persistent state file to coordinate daily counters across runs and workers, it is documented for future implementation.
+
 ## [2026-07-02] Fingerprint Reset via Periodic Browser Restart
 
 ### 23. Periodic Browser Restart to Prevent Fingerprint Accumulation

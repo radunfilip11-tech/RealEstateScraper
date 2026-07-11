@@ -69,11 +69,13 @@ export async function POST(request: Request) {
 
     const matchedMessages: string[] = [];
 
+    let matchIndex = 0;
     for (const listing of listings) {
       const matchedBuyers = buyers.filter((b) => matchesCriteria(listing, b.criteria));
       if (matchedBuyers.length > 0) {
+        matchIndex++;
         const buyerNames = matchedBuyers.map((b) => b.name).join(", ");
-        matchedMessages.push(`👤 *Za kupce:* ${buyerNames}\n🏠 ${listing.title}\n💰 ${listing.price || "Na upit"}\n📍 ${listing.location || "Nepoznato"}\n🔗 ${listing.url}`);
+        matchedMessages.push(`*#${matchIndex}* 👤 *Za kupce:* ${buyerNames}\n🏠 ${listing.title}\n💰 ${listing.price || "Na upit"}\n📍 ${listing.location || "Nepoznato"}\n🔗 ${listing.url}`);
       }
     }
 

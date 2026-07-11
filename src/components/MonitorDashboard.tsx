@@ -189,15 +189,7 @@ export default function MonitorDashboard() {
     setIsProcessing(false);
   };
 
-  const handleClearDb = async () => {
-    if (!confirm("Are you sure you want to clear ALL listings and logs?")) return;
-    setIsProcessing(true);
-    await fetch("/api/monitor/control", { method: "POST", body: JSON.stringify({ action: "clear_db" }) });
-    setLogs([]);
-    setListings([]);
-    setStats(null);
-    setIsProcessing(false);
-  };
+
 
   const getLogColor = (level: string) => {
     switch (level) {
@@ -243,13 +235,7 @@ export default function MonitorDashboard() {
             </button>
           )}
           
-          <button
-            onClick={handleClearDb}
-            disabled={isRunning || isProcessing}
-            className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
-          >
-            Clear Database
-          </button>
+
         </div>
       </div>
 

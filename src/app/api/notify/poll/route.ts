@@ -89,9 +89,9 @@ function listingMatchesFilter(
   return true;
 }
 
-function formatMatchLine(listing: Listing): string {
+function formatMatchLine(listing: Listing, index: number): string {
   return [
-    `🏠 ${listing.title}`,
+    `*#${index + 1}*  🏠 ${listing.title}`,
     `💰 ${listing.price || "Na upit"}`,
     `📍 ${listing.location || "Nepoznato"}`,
     `🔗 ${listing.url}`,

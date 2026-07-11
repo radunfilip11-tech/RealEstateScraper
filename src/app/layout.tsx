@@ -24,7 +24,7 @@ export default function RootLayout({
     <html lang="hr" className={`${inter.variable} h-full`}>
       <body className="min-h-full bg-[#f8f9fa] antialiased">
         <Sidebar />
-        <main className="ml-[240px] p-8">{children}</main>
+        <main className="md:ml-[240px] p-4 md:p-8">{children}</main>
       </body>
     </html>
   );

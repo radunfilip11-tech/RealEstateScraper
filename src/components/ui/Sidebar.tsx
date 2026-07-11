@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 
-const navItems = [
+const allNavItems = [
   {
     label: "Oglasi",
     href: "/",
+    devOnly: false,
     icon: (
       <svg
         className="w-5 h-5"
@@ -26,6 +28,7 @@ const navItems = [
   {
     label: "Kupci",
     href: "/buyers",
+    devOnly: false,
     icon: (
       <svg
         className="w-5 h-5"
@@ -45,6 +48,7 @@ const navItems = [
   {
     label: "Obavijesti",
     href: "/notifications",
+    devOnly: false,
     icon: (
       <svg
         className="w-5 h-5"
@@ -64,6 +68,7 @@ const navItems = [
   {
     label: "Postavke",
     href: "/settings",
+    devOnly: false,
     icon: (
       <svg
         className="w-5 h-5"
@@ -89,6 +94,7 @@ const navItems = [
   {
     label: "Live Monitor",
     href: "/monitor",
+    devOnly: true,
     icon: (
       <svg
         className="w-5 h-5"
@@ -107,14 +113,55 @@ const navItems = [
   },
 ];
 
+
 export default function Sidebar() {
   const pathname = usePathname();
+  const [isOpen, setIsOpen] = useState(false);
+  const [isProduction, setIsProduction] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then((res) => res.json())
+      .then((data) => setIsProduction(data.isProduction ?? false))
+      .catch(() => setIsProduction(false));
+  }, []);
+
+  // Hide dev-only items (Live Monitor) in production
+  const navItems = isProduction
+    ? allNavItems.filter((item) => !item.devOnly)
+    : allNavItems;
 
   return (
-    <aside
-      id="sidebar-nav"
-      className="fixed left-0 top-0 h-full w-[240px] bg-white border-r border-gray-200 flex flex-col z-40"
-    >
+    <>
+      {/* Mobile hamburger button */}
+      <button
+        className="md:hidden fixed top-4 right-4 z-50 p-2 bg-white border border-gray-200 rounded-lg shadow-sm"
+        onClick={() => setIsOpen(!isOpen)}
+        aria-label="Toggle Sidebar"
+      >
+        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {isOpen ? (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          ) : (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          )}
+        </svg>
+      </button>
+
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/20 z-40 md:hidden"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
+      <aside
+        id="sidebar-nav"
+        className={`fixed left-0 top-0 h-full w-[240px] bg-white border-r border-gray-200 flex-col z-50 transition-transform duration-300 ease-in-out md:translate-x-0 flex ${
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
       {/* Logo / Brand */}
       <div className="px-5 py-6 border-b border-gray-100">
         <div className="flex items-center gap-3">
@@ -151,6 +198,7 @@ export default function Sidebar() {
               key={item.href}
               href={item.href}
               id={`nav-${item.label.toLowerCase()}`}
+              onClick={() => setIsOpen(false)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
                 isActive
                   ? "bg-emerald-50 text-emerald-700 shadow-sm"
@@ -175,5 +223,6 @@ export default function Sidebar() {
         </p>
       </div>
     </aside>
+    </>
   );
 }

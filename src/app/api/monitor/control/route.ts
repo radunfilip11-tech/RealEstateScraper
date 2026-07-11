@@ -29,6 +29,16 @@ export async function POST(req: Request) {
   try {
     const { action, workers } = await req.json();
 
+    // SAFETY: Block destructive/process-spawning actions in production.
+    // In production, workers are managed by PM2 on the VPS, not via this API.
+    const isProduction = process.env.NODE_ENV === "production" || process.env.APP_ENV === "production";
+    if (isProduction && (action === "clear_db" || action === "start" || action === "stop")) {
+      return NextResponse.json(
+        { error: "This action is disabled in production." },
+        { status: 403 }
+      );
+    }
+
     if (action === "start") {
       const activeWorkers = getActiveWorkerIds();
       if (activeWorkers.length > 0) {
