@@ -1,5 +1,50 @@
 # Development Log
 
+## [2026-07-11] Production Deployment — Vercel + Supabase
+
+### 25. Production-Ready Code Changes
+- **Files changed**:
+  - `src/components/MonitorDashboard.tsx` — Removed "Clear Database" button and `handleClearDb` handler entirely (too dangerous, even in dev)
+  - `src/components/ui/Sidebar.tsx` — Added `devOnly: true` flag to "Live Monitor" nav item. Sidebar now fetches `/api/config` on mount and hides `devOnly` items when `APP_ENV=production`
+  - `src/app/api/config/route.ts` — **[NEW]** Returns `{ isProduction: boolean }` based on `NODE_ENV` or `APP_ENV`
+  - `src/app/api/monitor/control/route.ts` — Added production guard: blocks `clear_db`, `start`, `stop` actions when `APP_ENV=production` (returns 403)
+  - `.env.example` — **[NEW]** Template documenting all required env vars for each environment
+  - `vercel.json` — Removed 5-min cron job (`*/5 * * * *`) which was **blocking all Vercel Hobby deployments**. Notifications now handled by PM2 `notify-poll` on VPS instead
+- **Environment separation pattern**: `APP_ENV=production` on Vercel Production + VPS; unset locally. Controls Monitor tab visibility and API safety guards.
+
+### 26. Production Supabase Project Created
+- **Project name**: `nekretnine-prod`
+- **Project ID (Ref)**: `fyhgxulgonnjbzufqljf`
+- **Region**: `eu-west-3` (Paris)
+- **URL**: `https://fyhgxulgonnjbzufqljf.supabase.co`
+- **Schema**: Applied full migration via MCP — all 7 tables (`listings`, `seen_listings`, `notification_filters`, `scrape_runs`, `scraper_console_logs`, `category_scans`, `buyers`) with RLS enabled, indexes, triggers, and Realtime publication on `listings` + `scraper_console_logs`
+- **Cost**: Free tier ($0/mo)
+- **Note**: `category_scans` now has RLS enabled (was missing on the dev project)
+
+### 27. Vercel Deployment
+- **Project**: `real-estate-scraper` under `filips-projects-b5361cb6`
+- **Production URL**: `https://real-estate-scraper-sandy.vercel.app`
+- **Blocker found**: `vercel.json` cron expression `*/5 * * * *` completely blocked deployments on Hobby tier — had to remove it
+- **Environment variables**: Set up via Vercel dashboard — Production env uses prod Supabase keys + `APP_ENV=production`, Preview env uses dev Supabase keys + `APP_ENV=development`
+- **Vercel CLI**: Linked local project via `npx vercel link --yes --project real-estate-scraper`. Note: `vercel link` command adds a `VERCEL_OIDC_TOKEN` to `.env.local` — this is harmless and short-lived
+- **Git push**: Committed vercel.json change (`1d55d5a`) and deployed via `npx vercel --prod --yes`
+
+### 28. VPS Setup Plan (Not Yet Executed)
+- **Recommended provider**: Hetzner CX22 (~€5/mo, EU datacenter)
+- **Stack on VPS**: Node.js 20 + PM2 + Playwright Chromium
+- **PM2 processes**: `monitor-w1` (Worker 1), `monitor-w2` (Worker 2), `notify-poll` (continuous notification poller)
+- **Env**: `.env.local` on VPS with production Supabase keys + `APP_ENV=production`
+- **Auto-restart**: `pm2 startup` + `pm2 save` ensures workers survive server reboots
+- **Code updates**: `git pull` on VPS → `pm2 restart all`
+
+### Lessons Learned
+1. **Vercel Hobby blocks crons faster than daily** — `*/5 * * * *` in `vercel.json` prevents ALL deployments, not just the cron. Must remove the config entirely, not just disable.
+2. **`vercel link` modifies `.env.local`** — Adds `VERCEL_OIDC_TOKEN`. This is short-lived and harmless, but can surprise you if you expect `.env.local` to be untouched.
+3. **PowerShell does not support `&&`** — Use `;` as statement separator in PowerShell commands.
+4. **`TypeError: fetch failed` in monitor is transient** — Network blips cause this. The monitor already handles it correctly: logs error, waits 30-60s, retries next cycle (lines 235-238 in `monitor.ts`).
+5. **Supabase free tier pauses projects after 7 days of inactivity** — Keep this in mind for the dev project if you stop working on it for a while.
+
+
 ## [2026-07-08] Telegram Listing Numbering
 
 ### 24. Numbering Telegram listings within notification batches

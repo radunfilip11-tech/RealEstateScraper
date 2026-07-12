@@ -69,5 +69,14 @@ src/
 
 ---
 
+## Deployment Architecture (Production)
+- **Frontend**: Vercel (free Hobby tier) — `https://real-estate-scraper-sandy.vercel.app`
+- **Workers**: Hetzner CX22 VPS (~€5/mo) — PM2 manages `monitor-w1`, `monitor-w2`, `notify-poll`
+- **Database (Prod)**: Supabase `nekretnine-prod` (`fyhgxulgonnjbzufqljf`, eu-west-3)
+- **Database (Dev)**: Supabase `nekretnine` (`xlaaatbkorktjgbmjtkl`, eu-west-3)
+- **Environment separation**: `APP_ENV=production` hides Monitor tab, blocks clear_db/start/stop APIs. Vercel Production env → prod Supabase keys; Preview env → dev Supabase keys.
+- **Notifications**: PM2 `notify-poll` on VPS (continuous loop), NOT Vercel cron (blocked on Hobby tier).
+- **No auth layer** (single client, security-by-obscurity via URL). Future: add Supabase Auth when multi-user is needed.
+
 ## [2026-06-30] Multi-Worker Scraping Architecture & Latency Tracking (Superseded)
 - Original plan was 3 workers shuffling all categories. **Replaced** by 2-worker weighted split via `WORKER_CATEGORIES` (see [2026-07-01] entry above).
