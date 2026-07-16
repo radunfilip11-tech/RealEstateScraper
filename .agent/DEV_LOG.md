@@ -1,5 +1,74 @@
 # Development Log
 
+## [2026-07-16] VPS Provider Decision — Contabo (Conclusions)
+
+### 34. Provider evaluation & final decision
+- **Hetzner**: Originally planned (CX22), but **unavailable** for new instances (hardware shortage, Jun 2026).
+- **OVH vs Contabo**: Evaluated for 1-site start and 10-site scale.
+- **Decision**: **Contabo Cloud VPS 10** (8 GB, Nuremberg, Ubuntu 24.04) — ~€7/mo incl. VAT.
+
+### Conclusions (agreed in planning dialogue)
+1. **VPS role**: Workers only (`monitor-w1`, `monitor-w2`, `notify-poll`). Dashboard stays on Vercel; data in Supabase. VPS is stateless — switching providers takes ~30 min (git clone + `.env.local` + PM2).
+2. **Why Contabo over OVH for now**: 8 GB RAM fits 2 Njuškalo Playwright workers comfortably; OVH VPS-1 (4 GB) is too tight. Contabo offers best specs/€ for start.
+3. **CPU spikes (Contabo overselling)**: Workers **slow down, don't break**. PM2 auto-restarts on real crashes. Not a blocker for 1–3 sites.
+4. **Pause time reuse**: Idle CPU between Njuškalo cycles can run other sites on the **same VPS**. RAM is NOT freed (Chromium stays open). Rule: Njuškalo (2 workers) + **1 worker per additional site** on 8 GB VPS.
+5. **Separate IP per site**: **Not required** for different sites — bot protection is per-site. Separate IPs matter for **multiple workers on the same site**, not cross-site scraping.
+6. **Scaling to 10 sites** (projected, incl. ~25% VAT):
+   - **Budget pooled** (4× Contabo VPS 10): ~€28/mo — recommended
+   - **1 VPS per site** (OVH cheapest for isolation): ~€52/mo — overkill unless same-site worker scaling
+   - **Not on one VPS**: RAM limit (~3 sites per 8 GB box max)
+7. **Switch triggers**: Constant PM2 restarts → check RAM; cycles 3× slower for days → try OVH VPS-2; Hetzner available again → compare CX33.
+
+### Status
+- Deploy artifacts ready (`ecosystem.config.cjs`, `deploy/vps-setup.sh`, `env.example`) — **not yet pushed to GitHub**.
+- **Next step**: Order Contabo VPS 10 → push deploy files → SSH setup.
+
+## [2026-07-13] VPS Deployment Artifacts Added
+
+### 33. PM2 + Setup Script for Hetzner VPS
+- **Files added**:
+  - `ecosystem.config.cjs` — PM2 config for `monitor-w1`, `monitor-w2`, `notify-poll`
+  - `deploy/vps-setup.sh` — first-time Ubuntu/Debian setup (Node 20, PM2, Playwright, npm ci)
+  - `deploy/VPS_DEPLOY.md` — step-by-step deployment guide
+  - `env.example` — env var template (`.env.example` blocked by `.gitignore`)
+- **Architecture unchanged**: Vercel hosts dashboard; VPS runs workers only (no Next.js server on VPS)
+- **Next step for user**: Provision Hetzner CX22 → SSH → run `deploy/vps-setup.sh` → fill `.env.local` → `pm2 start ecosystem.config.cjs`
+
+## [2026-07-13] Node 24 TLS Fix — Scrapers Broken on Windows (Not a Code Regression)
+
+### 29. Problem Report & Investigation
+- **Symptom**: Scrapers stopped working — monitor logged `Failed to fetch known IDs: TypeError: fetch failed`, manual scrape via `/api/scrape` returned 500, `/api/monitor/stats` hung ~37s.
+- **Initial suspicion**: Last two git commits (`ee39ec4` vercel push, `1d55d5a` remove Vercel cron) — but **neither touched scraper code** (`njuskalo.ts`, `monitor.ts`, `cron.ts`, `/api/scrape`).
+- **Key test**: Checking out older commits that previously worked **still failed** → confirmed **environment change**, not a code regression.
+- **Node version at time of failure**: `v24.12.0`
+
+### 30. Root Cause
+- Node.js 24 uses its **own bundled CA certificate store** instead of the Windows system trust store by default.
+- On this Windows machine, something in the trust chain (likely antivirus HTTPS inspection or an extra root CA in the Windows store) causes a mismatch with Node's bundled CAs.
+- Error: `UNABLE_TO_VERIFY_LEAF_SIGNATURE — unable to verify the first certificate`
+- **Every Supabase HTTPS call failed** → scrapers could launch Playwright fine but could not read/write the database.
+- Passing `--use-system-ca` as a CLI flag alone did **not** work for `tsx` (child processes don't inherit it). Setting `NODE_OPTIONS=--use-system-ca` **did** work.
+
+### 31. Solution Applied
+- **Files changed**:
+  - `scripts/with-system-ca.mjs` — **[NEW]** Spawns Node child processes with `NODE_OPTIONS=--use-system-ca` so tsx and Next.js inherit the Windows CA store
+  - `package.json` — Updated `dev`, `start`, `scrape`, `monitor`, `notify-poll` scripts to route through the wrapper
+- **Not used**: `cross-env` npm package — `npm install` itself failed with the same TLS error before the fix was in place
+- **Verified**: `npm run monitor -- --worker-id 1` connected to Supabase (28k+ known listings), started scraping and saving private ads
+
+### 32. What the Last Two Commits Actually Changed (Unrelated to Scraper Failure)
+| Commit | Change | Affects scrapers? |
+|--------|--------|-------------------|
+| `ee39ec4` | Telegram listing numbering, production guard on monitor API (blocks start/stop in prod), mobile sidebar, `/api/config` | Only blocks dashboard start/stop **on Vercel production** — by design |
+| `1d55d5a` | Removed Vercel cron for `/api/notify/poll` | **No** — notifications only, moved to PM2 on VPS |
+
+### Lessons Learned
+1. **`TypeError: fetch failed` + `UNABLE_TO_VERIFY_LEAF_SIGNATURE` on Windows = TLS/CA issue, not transient network** — Check Node version first. On Node 24+, try `NODE_OPTIONS=--use-system-ca` before debugging scraper logic.
+2. **Old commits failing = environment problem** — Node upgrade, antivirus, or proxy change. Don't chase git diffs.
+3. **`--use-system-ca` CLI flag ≠ `NODE_OPTIONS=--use-system-ca` for tsx** — tsx spawns child Node processes; use `NODE_OPTIONS` env var or a wrapper script.
+4. **Alternative fix**: Downgrade to **Node 20 LTS** — avoids the bundled-CA mismatch on Windows entirely.
+5. **For `npm install` on affected machines**: Run `$env:NODE_OPTIONS="--use-system-ca"; npm install` in PowerShell before installing packages.
+
 ## [2026-07-11] Production Deployment — Vercel + Supabase
 
 ### 25. Production-Ready Code Changes

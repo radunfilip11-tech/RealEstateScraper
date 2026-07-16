@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/with-system-ca.mjs ./node_modules/next/dist/bin/next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/with-system-ca.mjs ./node_modules/next/dist/bin/next start",
     "lint": "eslint",
-    "scrape": "tsx scripts/cron.ts",
-    "monitor": "tsx scripts/monitor.ts",
-    "notify-poll": "tsx scripts/notify-poll.ts"
+    "scrape": "node scripts/with-system-ca.mjs ./node_modules/tsx/dist/cli.mjs scripts/cron.ts",
+    "monitor": "node scripts/with-system-ca.mjs ./node_modules/tsx/dist/cli.mjs scripts/monitor.ts",
+    "notify-poll": "node scripts/with-system-ca.mjs ./node_modules/tsx/dist/cli.mjs scripts/notify-poll.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
