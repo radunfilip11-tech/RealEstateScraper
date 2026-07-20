@@ -36,6 +36,39 @@ function stickyPass(sessionId: string): string {
   return `${stripStickyTags(PROXY_PASS)}_session-${sessionId}_lifetime-30m`;
 }
 
+// Same filter as scripts/monitor.ts — kept in sync manually. Measured: ad/
+// analytics hosts are ~99% of a page's bytes even with images/CSS/fonts off
+// (1105 KB -> 8 KB on a real Njuškalo search page, same card count).
+const BLOCKED_RESOURCE_TYPES = ["image", "stylesheet", "font", "media", "other"];
+const BLOCKED_AD_HOSTS = [
+  "googletagmanager.com",
+  "google-analytics.com",
+  "googlesyndication.com",
+  "doubleclick.net",
+  "googleadservices.com",
+  "adservice.google.com",
+  "analytics.tiktok.com",
+  "connect.facebook.net",
+  "facebook.com/tr",
+  "criteo.com",
+  "taboola.com",
+  "outbrain.com",
+];
+
+async function applyLeanFilter(pg: any): Promise<void> {
+  await pg.route("**/*", (route: any) => {
+    const request = route.request();
+    if (BLOCKED_RESOURCE_TYPES.includes(request.resourceType())) {
+      return route.abort();
+    }
+    const url = request.url();
+    if (BLOCKED_AD_HOSTS.some((host) => url.includes(host))) {
+      return route.abort();
+    }
+    return route.continue();
+  });
+}
+
 async function main() {
   if (!PROXY_HOST || !PROXY_PORT || !PROXY_USER || !PROXY_PASS) {
     console.error("❌ Missing PROXY_HOST/PORT/USER/PASS in .env.local");
@@ -158,12 +191,13 @@ async function main() {
   });
   const searchPage = await njCtx.newPage();
   const detailPage = await njCtx.newPage();
-  await detailPage.route("**/*", (route: any) => {
-    const type = route.request().resourceType();
-    if (["image", "stylesheet", "font", "media"].includes(type)) {
-      return route.abort();
-    }
-    return route.continue();
+  await applyLeanFilter(searchPage);
+  await applyLeanFilter(detailPage);
+
+  let bytesTransferred = 0;
+  searchPage.on("response", (res: any) => {
+    const len = res.headers()["content-length"];
+    if (len) bytesTransferred += parseInt(len, 10) || 0;
   });
 
   try {
@@ -187,6 +221,8 @@ async function main() {
         console.log("   Listings:   ⚠️  cards did not render in time");
       }
     }
+    await new Promise((r) => setTimeout(r, 2000)); // let late XHR settle before reading total
+    console.log(`   Bandwidth:  ${(bytesTransferred / 1024).toFixed(0)} KB (images/CSS/fonts + ad hosts blocked)`);
   } catch (err) {
     console.error("   Failed:", (err as Error).message);
   }

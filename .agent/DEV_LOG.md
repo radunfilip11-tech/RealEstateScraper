@@ -1,5 +1,17 @@
 # Development Log
 
+## [2026-07-20] Ad/analytics scripts, not images, were 99% of bandwidth
+
+### 43. Bandwidth still climbing fast after image/CSS/font blocking
+- **Symptom**: After deploying image/CSS/font/media blocking (see #42 below), proxy usage was still climbing ~100 MB / 10 min — nowhere near the expected "lean page" size.
+- **Root cause**: Measured a real Njuškalo search page (images/CSS/fonts/media already blocked) via a `page.on('response')` byte counter, broken down **by domain**: total was **1105 KB**, and **googletagmanager.com (710 KB) + pagead2.googlesyndication.com (231 KB) + analytics.tiktok.com (155 KB) = 1096 KB (99.2%)**. Njuškalo's own HTML/JS wasn't even in the top domains — third-party ad/analytics tags dwarfed it completely.
+- **Fix**: Added a host-substring blocklist (`googletagmanager.com`, `google-analytics.com`, `googlesyndication.com`, `doubleclick.net`, `googleadservices.com`, `adservice.google.com`, `analytics.tiktok.com`, `connect.facebook.net`, `facebook.com/tr`, `criteo.com`, `taboola.com`, `outbrain.com`) checked in the same `page.route()` handler, independent of `resourceType` (GTM loads as `script`, analytics beacons as `xhr`/`ping`/`image`). **Do NOT block `perfdrive.com`** — that's Radware/ShieldSquare's own bot-management infrastructure; blocking it breaks the bot-challenge flow.
+- **Verified**: Same search page, same lean filters plus ad-host block: **1105 KB → 8 KB**, still parsed **40 listing cards** correctly (no parsing regression). ~99.3% reduction on top of the image/CSS/font blocking already in place.
+- **Lesson for future sites**: Always measure real per-domain bytes on a "lean" page before assuming resource-type blocking (images/CSS/fonts) is enough — ad-tech/analytics JS is frequently the dominant cost on ad-supported classifieds sites, not the site's own images.
+- **Files**: `scripts/monitor.ts` (`BLOCKED_AD_HOSTS` in `applyBandwidthSaver`), `scripts/test-proxy.ts` (mirrors the same filter + reports KB used).
+
+---
+
 ## [2026-07-20] Proxy burned 2 GB in ~30 min — estimate was wrong
 
 ### 42. Why 4 GB/mo estimate failed

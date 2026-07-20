@@ -128,13 +128,41 @@ function proxySessionPass(sessionId: string): string {
 const BLOCKED_RESOURCE_TYPES = ["image", "stylesheet", "font", "media", "other"];
 
 /**
- * Apply bandwidth saver to a page. Keeps document/script/xhr/fetch so Vue can
- * still render listing cards; drops images/CSS/fonts (~90% of page weight).
+ * Third-party ad/analytics hosts — measured to be ~99% of a "lean" (no
+ * images/CSS/fonts) search page's bytes (1105 KB -> 8 KB with these blocked,
+ * same card count parsed). These add zero scraping value. Substring match
+ * against the full request URL, independent of resourceType (GTM is
+ * "script", analytics beacons are "xhr"/"ping"/"image", etc).
+ */
+const BLOCKED_AD_HOSTS = [
+  "googletagmanager.com",
+  "google-analytics.com",
+  "googlesyndication.com",
+  "doubleclick.net",
+  "googleadservices.com",
+  "adservice.google.com",
+  "analytics.tiktok.com",
+  "connect.facebook.net",
+  "facebook.com/tr",
+  "criteo.com",
+  "taboola.com",
+  "outbrain.com",
+];
+
+/**
+ * Apply bandwidth saver to a page. Blocks images/CSS/fonts/media AND known
+ * ad/analytics hosts. Keeps njuskalo.hr document/script/xhr so Vue can still
+ * render listing cards.
  */
 async function applyBandwidthSaver(pg: any): Promise<void> {
   await pg.route("**/*", (route: any) => {
-    const resourceType = route.request().resourceType();
+    const request = route.request();
+    const resourceType = request.resourceType();
     if (BLOCKED_RESOURCE_TYPES.includes(resourceType)) {
+      return route.abort();
+    }
+    const url = request.url();
+    if (BLOCKED_AD_HOSTS.some((host) => url.includes(host))) {
       return route.abort();
     }
     return route.continue();
