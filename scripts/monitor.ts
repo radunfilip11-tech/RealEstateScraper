@@ -96,7 +96,7 @@ const PROXY_USER = process.env.PROXY_USER || "";
 const PROXY_PASS = process.env.PROXY_PASS || "";
 const PROXY_ENABLED = !!(PROXY_HOST && PROXY_PORT && PROXY_USER && PROXY_PASS);
 
-/** Resource types to block on proxy pages to save bandwidth (~90% reduction). */
+/** Resource types to block on proxy detail pages to save bandwidth (~90% reduction). */
 const BLOCKED_RESOURCE_TYPES = ["image", "stylesheet", "font", "media", "other"];
 
 // Helper to log to both console and Supabase
@@ -165,10 +165,10 @@ async function runMonitor() {
 
   /**
    * Create the proxy-enabled browser context for detail page fetches.
-   * Returns null if proxy is not configured — detail pages will fall back to
-   * the main page (VPS native IP) in that case.
+   * Blocks images/CSS/fonts to save proxy bandwidth (~90% reduction).
+   * Returns null if proxy is not configured.
    */
-  async function createProxyContext(br: any, ua: string): Promise<{ ctx: any; pg: any } | null> {
+  async function createProxyDetailContext(br: any, ua: string): Promise<{ ctx: any; pg: any } | null> {
     if (!PROXY_ENABLED) return null;
 
     const proxyServer = `http://${PROXY_HOST}:${PROXY_PORT}`;
@@ -196,6 +196,29 @@ async function runMonitor() {
     return { ctx, pg };
   }
 
+  /**
+   * Create the proxy-enabled browser context for search pages.
+   * Does NOT block assets — search pages need full Vue rendering.
+   * Returns null if proxy is not configured.
+   */
+  async function createProxySearchContext(br: any, ua: string): Promise<{ ctx: any; pg: any } | null> {
+    if (!PROXY_ENABLED) return null;
+
+    const proxyServer = `http://${PROXY_HOST}:${PROXY_PORT}`;
+    const ctx = await br.newContext({
+      ...BASE_CONTEXT_OPTS,
+      userAgent: ua,
+      proxy: {
+        server: proxyServer,
+        username: PROXY_USER,
+        password: PROXY_PASS,
+      },
+    });
+
+    const pg = await ctx.newPage();
+    return { ctx, pg };
+  }
+
   let browser = await chromium.launch({
     headless: true,
     args: BROWSER_ARGS,
@@ -203,7 +226,7 @@ async function runMonitor() {
 
   const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
-  // Main context (VPS native IP) — for search/index pages
+  // Main context (VPS native IP) — fallback when proxy is not configured
   let context = await browser.newContext({
     ...BASE_CONTEXT_OPTS,
     userAgent,
@@ -211,15 +234,19 @@ async function runMonitor() {
 
   let page = await context.newPage();
 
-  // Proxy context (residential IP) — for detail page fetches
-  let proxyCtx = await createProxyContext(browser, userAgent);
-  let proxyPage = proxyCtx?.pg || null;
+  // Proxy contexts (residential IP)
+  let proxyDetailCtx = await createProxyDetailContext(browser, userAgent);
+  let proxySearchCtx = await createProxySearchContext(browser, userAgent);
+
+  // When proxy is enabled, use proxy pages for everything
+  let searchPage = proxySearchCtx?.pg || page;
+  let detailPage = proxyDetailCtx?.pg || page;
 
   await dbLog(`Browser launched. User-Agent: ${userAgent.substring(0, 50)}...`, "info");
   if (PROXY_ENABLED) {
-    await dbLog(`🌐 Proxy ENABLED: ${PROXY_HOST}:${PROXY_PORT} (detail pages via residential IP)`, "success");
+    await dbLog(`🌐 Proxy ENABLED: ${PROXY_HOST}:${PROXY_PORT} (ALL traffic via residential IP)`, "success");
   } else {
-    await dbLog(`⚠️  Proxy NOT configured — detail pages will use VPS native IP`, "warning");
+    await dbLog(`⚠️  Proxy NOT configured — all traffic via VPS native IP`, "warning");
   }
   await dbLog("", "info");
 
@@ -229,7 +256,8 @@ async function runMonitor() {
     if (shuttingDown) return;
     shuttingDown = true;
     await dbLog("Shutting down gracefully...", "warning");
-    try { if (proxyCtx) await proxyCtx.ctx.close(); } catch { /* ignore */ }
+    try { if (proxyDetailCtx) await proxyDetailCtx.ctx.close(); } catch { /* ignore */ }
+    try { if (proxySearchCtx) await proxySearchCtx.ctx.close(); } catch { /* ignore */ }
     try { await context.close(); } catch { /* ignore */ }
     try { await browser.close(); } catch { /* ignore */ }
     await dbLog(`Final stats: ${totalCycles} cycles, ${totalNewAds} new ads found, ${totalPrivateAds} private ads. Uptime: ${formatUptime()}`, "success");
@@ -314,15 +342,16 @@ async function runMonitor() {
       const category = categoryKeys[i];
       await dbLog(`\n── Category ${i + 1}/${categoryKeys.length}: ${category} ──`, "info");
 
-      // Scrape search page
-      const result = await scrapeSearchPageOnly(page, category);
+      // Scrape search page (uses proxy when available, VPS IP otherwise)
+      const result = await scrapeSearchPageOnly(searchPage, category);
 
       if (result.blocked) {
         await dbLog(`⚠️  BLOCKED by ShieldSquare! Backing off for ${BLOCKED_BACKOFF_MS / 60000} minutes...`, "error");
         blocked = true;
 
         // Restart browser with a new identity
-        try { if (proxyCtx) await proxyCtx.ctx.close(); } catch { /* ignore */ }
+        try { if (proxyDetailCtx) await proxyDetailCtx.ctx.close(); } catch { /* ignore */ }
+        try { if (proxySearchCtx) await proxySearchCtx.ctx.close(); } catch { /* ignore */ }
         try { await context.close(); } catch { /* ignore */ }
         try { await browser.close(); } catch { /* ignore */ }
 
@@ -340,9 +369,11 @@ async function runMonitor() {
         });
         page = await context.newPage();
 
-        // Recreate proxy context
-        proxyCtx = await createProxyContext(browser, newUA);
-        proxyPage = proxyCtx?.pg || null;
+        // Recreate proxy contexts
+        proxyDetailCtx = await createProxyDetailContext(browser, newUA);
+        proxySearchCtx = await createProxySearchContext(browser, newUA);
+        searchPage = proxySearchCtx?.pg || page;
+        detailPage = proxyDetailCtx?.pg || page;
 
         await dbLog(`Browser restarted with new UA: ${newUA.substring(0, 50)}...`, "info");
         break; // Restart the cycle
@@ -374,7 +405,7 @@ async function runMonitor() {
           let detailBlocked = false;
 
           // Fetch detail pages — use proxy page if available, otherwise fall back to main page
-          const detailFetchPage = proxyPage || page;
+          const detailFetchPage = detailPage;
           for (const listing of uniqueNewListings) {
             if (!listing.url) continue;
 
@@ -602,7 +633,8 @@ async function runMonitor() {
       // Periodic Browser Restart (every 50 cycles) to prevent fingerprint accumulation
       if (totalCycles > 0 && totalCycles % 50 === 0) {
         await dbLog(`[Periodic Restart] Reached ${totalCycles} cycles. Restarting browser to reset fingerprint...`, "info");
-        try { if (proxyCtx) await proxyCtx.ctx.close(); } catch { /* ignore */ }
+        try { if (proxyDetailCtx) await proxyDetailCtx.ctx.close(); } catch { /* ignore */ }
+        try { if (proxySearchCtx) await proxySearchCtx.ctx.close(); } catch { /* ignore */ }
         try { await context.close(); } catch { /* ignore */ }
         try { await browser.close(); } catch { /* ignore */ }
 
@@ -617,9 +649,11 @@ async function runMonitor() {
         });
         page = await context.newPage();
 
-        // Recreate proxy context
-        proxyCtx = await createProxyContext(browser, newUA);
-        proxyPage = proxyCtx?.pg || null;
+        // Recreate proxy contexts
+        proxyDetailCtx = await createProxyDetailContext(browser, newUA);
+        proxySearchCtx = await createProxySearchContext(browser, newUA);
+        searchPage = proxySearchCtx?.pg || page;
+        detailPage = proxyDetailCtx?.pg || page;
 
         await dbLog(`Browser restarted with new UA: ${newUA.substring(0, 50)}...`, "info");
       }
