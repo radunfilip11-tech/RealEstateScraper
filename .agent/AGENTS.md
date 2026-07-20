@@ -54,6 +54,7 @@ src/
 ## Scraper Strategy & Bot Protection Bypass (Njuškalo)
 - **HTML Parsing**: Njuškalo's property cards are wrapped in `<article class="entity-body cf">`. Do **not** split/match on `<li>` tags because inner lists (like prices) will break the regex lazily. Always extract based on the `<article>` wrapper.
 - **Bot Protection (ShieldSquare)**: Repeatedly hitting the same category in headless Playwright triggers Captchas. Mitigations:
+  - **IPRoyal residential proxy** for detail page fetches (search pages stay on VPS native IP to save bandwidth). Configured via `PROXY_HOST/PORT/USER/PASS` env vars. Images/CSS/fonts blocked on proxy context (~90% bandwidth reduction).
   - `puppeteer-extra-plugin-stealth` + rotating User-Agents
   - 60s minimum cycle duration when cycles finish too fast (no new ads = robotic polling pattern)
   - 2 workers with different category subsets (not identical loops)

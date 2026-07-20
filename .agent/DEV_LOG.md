@@ -1,5 +1,17 @@
 # Development Log
 
+## [2026-07-20] IPRoyal Residential Proxy Integration
+
+### 40. IPRoyal proxy for detail page fetches
+- **Problem**: Both workers getting frequently blocked by ShieldSquare on the Contabo VPS datacenter IP. 10-min backoff insufficient — re-blocked within 1 second of restarting.
+- **Solution**: IPRoyal residential proxy ($1.56–6.25/GB) routed through Playwright's native proxy support.
+- **Architecture**: Hybrid routing — search pages still use VPS native IP (free, low risk); detail pages use proxy context (residential Croatian IP).
+- **Bandwidth saving**: Proxy context blocks images, CSS, fonts, and media via `page.route()` — reduces per-page data from ~3 MB to ~100-150 KB (~90% reduction).
+- **Env vars**: `PROXY_HOST`, `PROXY_PORT`, `PROXY_USER`, `PROXY_PASS` in `.env.local` / `.env.production.local`.
+- **Fallback**: If proxy vars not set, detail pages fall back to VPS native IP (existing behavior).
+- **Verified**: `scripts/test-proxy.ts` confirmed direct IP `150.228.3.94` vs proxy IP `86.33.95.3`, Njuškalo search page loaded successfully through proxy without ShieldSquare block.
+- **Files changed**: `scripts/monitor.ts` (proxy context creation, all 3 restart paths updated), `.env.local`, `.env.production.local`, `.env.example`, `scripts/test-proxy.ts`.
+
 ## [2026-07-20] Contabo VPS Live — Production Workers Deployed
 
 ### 35. VPS provisioned & workers running

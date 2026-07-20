@@ -87,6 +87,18 @@ const USER_AGENTS = [
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
 ];
 
+// ---------------------------------------------------------------------------
+// Proxy configuration (IPRoyal residential proxy for detail page fetches)
+// ---------------------------------------------------------------------------
+const PROXY_HOST = process.env.PROXY_HOST || "";
+const PROXY_PORT = process.env.PROXY_PORT || "";
+const PROXY_USER = process.env.PROXY_USER || "";
+const PROXY_PASS = process.env.PROXY_PASS || "";
+const PROXY_ENABLED = !!(PROXY_HOST && PROXY_PORT && PROXY_USER && PROXY_PASS);
+
+/** Resource types to block on proxy pages to save bandwidth (~90% reduction). */
+const BLOCKED_RESOURCE_TYPES = ["image", "stylesheet", "font", "media", "other"];
+
 // Helper to log to both console and Supabase
 async function dbLog(message: string, level: "info" | "success" | "warning" | "error" = "info") {
   const taggedMessage = `${WORKER_TAG} ${message}`;
@@ -136,30 +148,79 @@ async function runMonitor() {
   const StealthPlugin = require("puppeteer-extra-plugin-stealth");
   chromium.use(StealthPlugin());
 
-  let browser = await chromium.launch({
-    headless: true,
-    args: [
-      "--disable-blink-features=AutomationControlled",
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
-  });
+  const BROWSER_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+  ];
 
-  const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-
-  let context = await browser.newContext({
-    locale: "hr-HR",
+  const BASE_CONTEXT_OPTS = {
+    locale: "hr-HR" as const,
     timezoneId: "Europe/Zagreb",
-    userAgent,
     viewport: { width: 1920, height: 1080 },
     extraHTTPHeaders: {
       "Accept-Language": "hr-HR,hr;q=0.9,en-US;q=0.8,en;q=0.7",
     },
+  };
+
+  /**
+   * Create the proxy-enabled browser context for detail page fetches.
+   * Returns null if proxy is not configured — detail pages will fall back to
+   * the main page (VPS native IP) in that case.
+   */
+  async function createProxyContext(br: any, ua: string): Promise<{ ctx: any; pg: any } | null> {
+    if (!PROXY_ENABLED) return null;
+
+    const proxyServer = `http://${PROXY_HOST}:${PROXY_PORT}`;
+    const ctx = await br.newContext({
+      ...BASE_CONTEXT_OPTS,
+      userAgent: ua,
+      proxy: {
+        server: proxyServer,
+        username: PROXY_USER,
+        password: PROXY_PASS,
+      },
+    });
+
+    const pg = await ctx.newPage();
+
+    // Block images, CSS, fonts, and media to save proxy bandwidth (~90% reduction).
+    await pg.route("**/*", (route: any) => {
+      const resourceType = route.request().resourceType();
+      if (BLOCKED_RESOURCE_TYPES.includes(resourceType)) {
+        return route.abort();
+      }
+      return route.continue();
+    });
+
+    return { ctx, pg };
+  }
+
+  let browser = await chromium.launch({
+    headless: true,
+    args: BROWSER_ARGS,
+  });
+
+  const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+
+  // Main context (VPS native IP) — for search/index pages
+  let context = await browser.newContext({
+    ...BASE_CONTEXT_OPTS,
+    userAgent,
   });
 
   let page = await context.newPage();
 
+  // Proxy context (residential IP) — for detail page fetches
+  let proxyCtx = await createProxyContext(browser, userAgent);
+  let proxyPage = proxyCtx?.pg || null;
+
   await dbLog(`Browser launched. User-Agent: ${userAgent.substring(0, 50)}...`, "info");
+  if (PROXY_ENABLED) {
+    await dbLog(`🌐 Proxy ENABLED: ${PROXY_HOST}:${PROXY_PORT} (detail pages via residential IP)`, "success");
+  } else {
+    await dbLog(`⚠️  Proxy NOT configured — detail pages will use VPS native IP`, "warning");
+  }
   await dbLog("", "info");
 
   // Graceful shutdown
@@ -168,6 +229,7 @@ async function runMonitor() {
     if (shuttingDown) return;
     shuttingDown = true;
     await dbLog("Shutting down gracefully...", "warning");
+    try { if (proxyCtx) await proxyCtx.ctx.close(); } catch { /* ignore */ }
     try { await context.close(); } catch { /* ignore */ }
     try { await browser.close(); } catch { /* ignore */ }
     await dbLog(`Final stats: ${totalCycles} cycles, ${totalNewAds} new ads found, ${totalPrivateAds} private ads. Uptime: ${formatUptime()}`, "success");
@@ -260,6 +322,7 @@ async function runMonitor() {
         blocked = true;
 
         // Restart browser with a new identity
+        try { if (proxyCtx) await proxyCtx.ctx.close(); } catch { /* ignore */ }
         try { await context.close(); } catch { /* ignore */ }
         try { await browser.close(); } catch { /* ignore */ }
 
@@ -269,16 +332,18 @@ async function runMonitor() {
         const newUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
         browser = await chromium.launch({
           headless: true,
-          args: ["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-setuid-sandbox"],
+          args: BROWSER_ARGS,
         });
         context = await browser.newContext({
-          locale: "hr-HR",
-          timezoneId: "Europe/Zagreb",
+          ...BASE_CONTEXT_OPTS,
           userAgent: newUA,
-          viewport: { width: 1920, height: 1080 },
-          extraHTTPHeaders: { "Accept-Language": "hr-HR,hr;q=0.9,en-US;q=0.8,en;q=0.7" },
         });
         page = await context.newPage();
+
+        // Recreate proxy context
+        proxyCtx = await createProxyContext(browser, newUA);
+        proxyPage = proxyCtx?.pg || null;
+
         await dbLog(`Browser restarted with new UA: ${newUA.substring(0, 50)}...`, "info");
         break; // Restart the cycle
       }
@@ -308,7 +373,8 @@ async function runMonitor() {
           const seenListingsToSave = [];
           let detailBlocked = false;
 
-          // Fetch detail pages using Playwright (reliable against ShieldSquare)
+          // Fetch detail pages — use proxy page if available, otherwise fall back to main page
+          const detailFetchPage = proxyPage || page;
           for (const listing of uniqueNewListings) {
             if (!listing.url) continue;
 
@@ -316,7 +382,7 @@ async function runMonitor() {
               // Human-like delay between detail page visits (1.5-3s)
               await randomDelay(1500, 3000);
 
-              const detail = await fetchDetailPagePlaywright(page, listing.url);
+              const detail = await fetchDetailPagePlaywright(detailFetchPage, listing.url);
 
               // Check if bot protection was triggered on detail page
               if (detail.blocked) {
@@ -536,22 +602,25 @@ async function runMonitor() {
       // Periodic Browser Restart (every 50 cycles) to prevent fingerprint accumulation
       if (totalCycles > 0 && totalCycles % 50 === 0) {
         await dbLog(`[Periodic Restart] Reached ${totalCycles} cycles. Restarting browser to reset fingerprint...`, "info");
+        try { if (proxyCtx) await proxyCtx.ctx.close(); } catch { /* ignore */ }
         try { await context.close(); } catch { /* ignore */ }
         try { await browser.close(); } catch { /* ignore */ }
 
         const newUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
         browser = await chromium.launch({
           headless: true,
-          args: ["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-setuid-sandbox"],
+          args: BROWSER_ARGS,
         });
         context = await browser.newContext({
-          locale: "hr-HR",
-          timezoneId: "Europe/Zagreb",
+          ...BASE_CONTEXT_OPTS,
           userAgent: newUA,
-          viewport: { width: 1920, height: 1080 },
-          extraHTTPHeaders: { "Accept-Language": "hr-HR,hr;q=0.9,en-US;q=0.8,en;q=0.7" },
         });
         page = await context.newPage();
+
+        // Recreate proxy context
+        proxyCtx = await createProxyContext(browser, newUA);
+        proxyPage = proxyCtx?.pg || null;
+
         await dbLog(`Browser restarted with new UA: ${newUA.substring(0, 50)}...`, "info");
       }
     }
