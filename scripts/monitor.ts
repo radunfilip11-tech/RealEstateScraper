@@ -97,9 +97,9 @@ const PROXY_PASS = process.env.PROXY_PASS || "";
 const PROXY_ENABLED = !!(PROXY_HOST && PROXY_PORT && PROXY_USER && PROXY_PASS);
 
 /** Generate a unique session ID for IPRoyal IP rotation. Each session = different residential IP. */
-function proxySessionUser(): string {
+function proxySessionPass(): string {
   const sessionId = `s${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  return `${PROXY_USER}_session-${sessionId}`;
+  return `${PROXY_PASS}_session-${sessionId}`;
 }
 
 /** Resource types to block on proxy detail pages to save bandwidth (~90% reduction). */
@@ -183,8 +183,8 @@ async function runMonitor() {
       userAgent: ua,
       proxy: {
         server: proxyServer,
-        username: proxySessionUser(),
-        password: PROXY_PASS,
+        username: PROXY_USER,
+        password: proxySessionPass(),
       },
     });
 
@@ -216,8 +216,8 @@ async function runMonitor() {
       userAgent: ua,
       proxy: {
         server: proxyServer,
-        username: proxySessionUser(),
-        password: PROXY_PASS,
+        username: PROXY_USER,
+        password: proxySessionPass(),
       },
     });
 

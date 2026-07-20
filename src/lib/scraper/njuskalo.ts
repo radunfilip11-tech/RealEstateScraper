@@ -620,8 +620,8 @@ export async function scrapeSearchPageOnly(
         timeout: 15000,
       });
     } catch {
-      console.warn(`[Monitor] [${category}] No listing cards found (empty or blocked).`);
-      return { listings: [], blocked: false };
+      console.warn(`[Monitor] [${category}] No listing cards found (timeout). Treating as soft block!`);
+      return { listings: [], blocked: true };
     }
 
     // Human-like scroll
@@ -632,12 +632,16 @@ export async function scrapeSearchPageOnly(
 
     const html = await page.content();
     const listings = parseListingsFromHTML(html, category);
+    if (listings.length === 0) {
+      console.warn(`[Monitor] [${category}] Parsed 0 listings from HTML. Treating as soft block!`);
+      return { listings: [], blocked: true };
+    }
     console.log(`[Monitor] [${category}] Found ${listings.length} listings on page 1.`);
 
     return { listings, blocked: false };
   } catch (error) {
     console.error(`[Monitor] [${category}] Error loading search page:`, error);
-    return { listings: [], blocked: false };
+    return { listings: [], blocked: true };
   }
 }
 
