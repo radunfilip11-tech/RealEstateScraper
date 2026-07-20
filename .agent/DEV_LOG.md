@@ -2,15 +2,16 @@
 
 ## [2026-07-20] IPRoyal Residential Proxy Integration
 
-### 40. IPRoyal proxy for detail page fetches
-- **Problem**: Both workers getting frequently blocked by ShieldSquare on the Contabo VPS datacenter IP. 10-min backoff insufficient — re-blocked within 1 second of restarting.
-- **Solution**: IPRoyal residential proxy ($1.56–6.25/GB) routed through Playwright's native proxy support.
-- **Architecture**: Hybrid routing — search pages still use VPS native IP (free, low risk); detail pages use proxy context (residential Croatian IP).
-- **Bandwidth saving**: Proxy context blocks images, CSS, fonts, and media via `page.route()` — reduces per-page data from ~3 MB to ~100-150 KB (~90% reduction).
+### 40. IPRoyal proxy for all scraping traffic
+- **Problem**: Both workers getting frequently blocked by ShieldSquare on the Contabo VPS datacenter IP. 10-min backoff was insufficient — re-blocked within 1 second of restarting. Additionally, routing only details through the proxy proved insufficient because search page requests also triggered ShieldSquare blocks on the VPS native IP.
+- **Solution**: IPRoyal residential proxy ($1.56–6.25/GB) routed through Playwright's native proxy support for ALL Njuškalo traffic.
+- **Architecture**: Dual proxy context routing:
+  - **Search pages**: Routed through a proxy context *with* assets enabled (required for Vue layout rendering).
+  - **Detail pages**: Routed through a proxy context *without* assets (images, CSS, fonts, and media blocked via `page.route()` to achieve a ~90% bandwidth reduction from ~3 MB to ~100-150 KB per page).
+  - **Fallback**: If proxy vars not set, all traffic falls back to VPS native IP (existing behavior).
 - **Env vars**: `PROXY_HOST`, `PROXY_PORT`, `PROXY_USER`, `PROXY_PASS` in `.env.local` / `.env.production.local`.
-- **Fallback**: If proxy vars not set, detail pages fall back to VPS native IP (existing behavior).
-- **Verified**: `scripts/test-proxy.ts` confirmed direct IP `150.228.3.94` vs proxy IP `86.33.95.3`, Njuškalo search page loaded successfully through proxy without ShieldSquare block.
-- **Files changed**: `scripts/monitor.ts` (proxy context creation, all 3 restart paths updated), `.env.local`, `.env.production.local`, `.env.example`, `scripts/test-proxy.ts`.
+- **Verified**: Confirmed both workers running successfully on the VPS via `pm2 logs`, fetching categories and detail pages without ShieldSquare blocks.
+- **Files changed**: `scripts/monitor.ts` (dual proxy context creation, all 3 restart paths updated), `.env.local`, `.env.production.local`, `.env.example`, `scripts/test-proxy.ts`.
 
 ## [2026-07-20] Contabo VPS Live — Production Workers Deployed
 
