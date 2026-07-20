@@ -65,7 +65,7 @@ const WORKER_TAG = `[W${WORKER_ID}]`;
 // Define PID file path (per-worker)
 const PID_FILE = path.resolve(__dirname, `../monitor-${WORKER_ID}.pid`);
 
-let supabase;
+let supabase: ReturnType<typeof getSupabaseServerClient>;
 try {
   supabase = getSupabaseServerClient();
 } catch (err) {
