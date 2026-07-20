@@ -76,9 +76,9 @@ try {
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const CATEGORY_DELAY_MS = { min: 2000, max: 3600 }; // 1.6-2.3s between categories
-const CYCLE_REST_MS = { min: 2000, max: 6500 };    // 1.4-2.3s rest between full cycles
-const BLOCKED_BACKOFF_MS = 600000;                 // 10 min backoff if blocked
+const CATEGORY_DELAY_MS = { min: 15000, max: 45000 }; // 15-45s between categories (human browsing pace)
+const CYCLE_REST_MS = { min: 30000, max: 90000 };      // 30-90s rest between full cycles
+const BLOCKED_BACKOFF_MS = 600000;                      // 10 min backoff if blocked
 
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
@@ -95,6 +95,12 @@ const PROXY_PORT = process.env.PROXY_PORT || "";
 const PROXY_USER = process.env.PROXY_USER || "";
 const PROXY_PASS = process.env.PROXY_PASS || "";
 const PROXY_ENABLED = !!(PROXY_HOST && PROXY_PORT && PROXY_USER && PROXY_PASS);
+
+/** Generate a unique session ID for IPRoyal IP rotation. Each session = different residential IP. */
+function proxySessionUser(): string {
+  const sessionId = `s${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  return `${PROXY_USER}_session-${sessionId}`;
+}
 
 /** Resource types to block on proxy detail pages to save bandwidth (~90% reduction). */
 const BLOCKED_RESOURCE_TYPES = ["image", "stylesheet", "font", "media", "other"];
@@ -177,7 +183,7 @@ async function runMonitor() {
       userAgent: ua,
       proxy: {
         server: proxyServer,
-        username: PROXY_USER,
+        username: proxySessionUser(),
         password: PROXY_PASS,
       },
     });
@@ -210,7 +216,7 @@ async function runMonitor() {
       userAgent: ua,
       proxy: {
         server: proxyServer,
-        username: PROXY_USER,
+        username: proxySessionUser(),
         password: PROXY_PASS,
       },
     });
@@ -410,8 +416,8 @@ async function runMonitor() {
             if (!listing.url) continue;
 
             try {
-              // Human-like delay between detail page visits (1.5-3s)
-              await randomDelay(1500, 3000);
+              // Human-like delay between detail page visits (3-6s)
+              await randomDelay(3000, 6000);
 
               const detail = await fetchDetailPagePlaywright(detailFetchPage, listing.url);
 
