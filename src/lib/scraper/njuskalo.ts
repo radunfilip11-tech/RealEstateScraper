@@ -209,6 +209,213 @@ export function parseDetailPageHTML(html: string): {
 }
 
 /**
+ * Map a monitor category key to Njuškalo property + transaction type labels.
+ * Shared by the HTML and JSON search parsers.
+ */
+function getTypesForCategory(category: string): {
+  propertyType: string | null;
+  transactionType: string;
+} {
+  let propertyType: string | null = null;
+  let transactionType = "Prodaja"; // default
+
+  if (category === "stanovi") propertyType = "Stan";
+  else if (category === "kuce") propertyType = "Kuća";
+  else if (category === "zemljista") propertyType = "Zemljište";
+  else if (category === "poslovni_prostori") propertyType = "Poslovni prostor";
+  else if (category === "vikendice") propertyType = "Vikendica";
+  else if (category === "garaze") propertyType = "Garaža";
+  else if (category === "novogradnja") propertyType = "Novogradnja";
+  else if (category === "luksuzne_kuce") propertyType = "Luksuzna kuća";
+  else if (category === "luksuzni_stanovi") propertyType = "Luksuzni stan";
+  else if (category === "najam_stanova") { propertyType = "Stan"; transactionType = "Najam"; }
+  else if (category === "najam_kuca") { propertyType = "Kuća"; transactionType = "Najam"; }
+  else if (category === "najam_poslovnih_prostora") { propertyType = "Poslovni prostor"; transactionType = "Najam"; }
+  else if (category === "najam_garaza") { propertyType = "Garaža"; transactionType = "Najam"; }
+  else if (category === "najam_zemljista") { propertyType = "Zemljište"; transactionType = "Najam"; }
+  else if (category === "najam_luksuznih_kuca") { propertyType = "Luksuzna kuća"; transactionType = "Najam"; }
+  else if (category === "najam_luksuznih_stanova") { propertyType = "Luksuzni stan"; transactionType = "Najam"; }
+
+  return { propertyType, transactionType };
+}
+
+/**
+ * Decode a JSON string body (the text between the quotes) — resolves \uXXXX
+ * escapes (e.g. \u002F for "/"), escaped quotes, etc. Falls back to raw input.
+ */
+function decodeJsonString(raw: string): string {
+  try {
+    return JSON.parse(`"${raw}"`);
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Parse listings from the Njuškalo search page's embedded state JSON
+ * (`browseListingsStore`).
+ *
+ * Njuškalo server-renders a large inline <script> holding the Vue store state.
+ * Every real-estate listing object in it carries all the fields we persist —
+ * crucially `isOwnerResidentialSeller`, the private-vs-agency flag that is NOT
+ * present in the visible HTML cards. Reading it here lets the monitor classify
+ * and save listings WITHOUT ever opening a detail page.
+ *
+ * Robustness: instead of JSON.parse-ing a 100 KB+ object (brittle), we slice
+ * from the `browseListingsStore` key, split on `{"id":` boundaries, and parse
+ * each chunk with targeted regexes — keeping only real-estate listing chunks
+ * (`"categorySlug":"nekretnine"` + `"titleSlug"`). Nav-menu and featured-store
+ * objects that share the same script are ignored.
+ *
+ * See .agent/NJUSKALO_SEARCH_JSON.md for the full field reference.
+ */
+export function parseListingsFromSearchJSON(
+  html: string,
+  category: string
+): ListingInsert[] {
+  const listings: ListingInsert[] = [];
+
+  const storeIdx = html.indexOf("browseListingsStore");
+  if (storeIdx === -1) return listings;
+  const blob = html.slice(storeIdx);
+
+  const { propertyType, transactionType } = getTypesForCategory(category);
+  const seen = new Set<string>();
+
+  // Each listing object begins with `{"id":`; split on that boundary.
+  const chunks = blob.split('{"id":');
+  for (const chunk of chunks) {
+    try {
+      // Keep only real-estate listing objects (skip nav menu / featured stores).
+      if (!/"categorySlug":"nekretnine"/.test(chunk)) continue;
+      const slugMatch = chunk.match(/"titleSlug":"([^"]+)"/);
+      const flagMatch = chunk.match(/"isOwnerResidentialSeller":(true|false)/);
+      const idMatch = chunk.match(/^(\d+)/);
+      if (!slugMatch || !flagMatch || !idMatch) continue;
+
+      const id = idMatch[1];
+      const externalId = `njuskalo-${id}`;
+      if (seen.has(externalId)) continue;
+      seen.add(externalId);
+
+      const titleSlug = slugMatch[1];
+      const url = `${NJUSKALO_BASE}/nekretnine/${titleSlug}-oglas-${id}`;
+
+      // --- Title ---
+      const titleMatch = chunk.match(/"title":"((?:\\.|[^"\\])*)"/);
+      const title = titleMatch ? decodeJsonString(titleMatch[1]) : `Oglas ${id}`;
+
+      // --- Advertiser type (the whole point of this parser) ---
+      const advertiserType = flagMatch[1] === "true" ? "Privatni" : "Agencija";
+
+      // --- Abstracts (building type, size, location caption) ---
+      const absMatch = chunk.match(/"abstracts":(\[[\s\S]*?\]),"createdAt"/);
+      const abstractValues: string[] = [];
+      if (absMatch) {
+        const valRe = /"value":"((?:\\.|[^"\\])*)"/g;
+        let vm: RegExpExecArray | null;
+        while ((vm = valRe.exec(absMatch[1])) !== null) {
+          abstractValues.push(decodeJsonString(vm[1]));
+        }
+      }
+      const description =
+        abstractValues.length > 0
+          ? abstractValues.join(", ").substring(0, 500)
+          : null;
+
+      // --- Size (m²) from an abstract like "Stambena površina: 76.36 m2" ---
+      let sizeM2: number | null = null;
+      for (const v of abstractValues) {
+        const sm = v.match(/povr[šs]ina[^0-9]*([\d.,]+)\s*m/i);
+        if (sm) {
+          const parsed = parseFloat(sm[1].replace(/\s/g, "").replace(",", "."));
+          if (!isNaN(parsed)) sizeM2 = parsed;
+          break;
+        }
+      }
+
+      // --- Price ---
+      let price: string | null = null;
+      let priceNumeric: number | null = null;
+      const hidePrice = /"hidePrice":true/.test(chunk);
+      const onRequest = /"isPriceOnRequest":true/.test(chunk);
+      const priceMatch = chunk.match(/"priceFormatted":"([^"]*)"/);
+      if (!hidePrice && !onRequest && priceMatch && priceMatch[1]) {
+        price = decodeJsonString(priceMatch[1]);
+        const numStr = price
+          .replace(/[^\d.,]/g, "")
+          .replace(/\./g, "")
+          .replace(",", ".");
+        const parsed = parseFloat(numStr);
+        if (!isNaN(parsed)) priceNumeric = parsed;
+      }
+
+      // --- Location ---
+      let location: string | null = null;
+      let locationCounty: string | null = null;
+      let locationCity: string | null = null;
+      let locationNeighborhood: string | null = null;
+      const locMatch = chunk.match(/"location":"((?:\\.|[^"\\])*)"/);
+      if (locMatch && locMatch[1]) {
+        location = decodeJsonString(locMatch[1]) || null;
+        if (location) {
+          const parts = location.split(",").map((s) => s.trim());
+          if (parts.length > 0) locationCity = parts[0] || null;
+          if (parts.length > 1) locationNeighborhood = parts[1] || null;
+          if (locationCity) {
+            locationCounty = CITY_TO_COUNTY[locationCity] || null;
+          }
+        }
+      }
+
+      // --- Image ---
+      let imageUrl: string | null = null;
+      const imgMatch = chunk.match(/"image":"((?:\\.|[^"\\])*)"/);
+      if (imgMatch && imgMatch[1]) {
+        imageUrl = decodeJsonString(imgMatch[1]) || null;
+      }
+
+      // --- Promoted ---
+      const isPromoted = /"isPromoted":true/.test(chunk);
+
+      // --- Published at ---
+      let publishedAt: string | undefined = undefined;
+      const pubMatch = chunk.match(/"createdAt":"([^"]+)"/);
+      if (pubMatch) publishedAt = pubMatch[1];
+
+      listings.push({
+        external_id: externalId,
+        title,
+        price,
+        price_numeric: priceNumeric,
+        size_m2: sizeM2,
+        location,
+        location_region: null,
+        location_county: locationCounty,
+        location_city: locationCity,
+        location_neighborhood: locationNeighborhood,
+        property_type: propertyType,
+        transaction_type: transactionType,
+        advertiser_type: advertiserType,
+        url,
+        image_url: imageUrl,
+        source: "njuskalo",
+        description,
+        status: "Novi",
+        hidden: false,
+        is_promoted: isPromoted,
+        published_at: publishedAt,
+      });
+    } catch (e) {
+      console.error("[Scraper] Error parsing search JSON listing:", e);
+      continue;
+    }
+  }
+
+  return listings;
+}
+
+/**
  * Parse listing items from Njuškalo search results HTML.
  *
  * Real HTML structure (as of June 2026):
@@ -513,55 +720,14 @@ export async function scrapeNjuskalo(
             await randomDelay(300, 700);
 
             const html = await page.content();
-            const pageListings = parseListingsFromHTML(html, category);
-            console.log(`[Scraper] [${category}] [${county || "all"}] Page ${pageNum}: found ${pageListings.length} listings`);
-
-            // Enrich listings missing price/location by visiting their detail pages.
-            // This handles SuperVau (premium) cards that only show a teaser on the
-            // search results page but have full structured data on the detail page.
-            // Also visit if advertiser type is missing, since it might only be on the detail page.
-            const incomplete = pageListings.filter((l) => !l.price || !l.location || !l.advertiser_type);
-            if (incomplete.length > 0) {
-              console.log(`[Scraper] [${category}] ${incomplete.length} listings missing data — visiting detail pages...`);
-              for (const listing of incomplete) {
-                if (!listing.url) continue;
-                try {
-                  await randomDelay(1500, 3000); // Human-like delay before each detail visit
-                  await page.goto(listing.url, {
-                    waitUntil: "domcontentloaded",
-                    timeout: 20000,
-                  });
-                  // Detail pages are server-rendered, no need for waitForSelector
-                  await randomDelay(500, 1000);
-                  const detailHtml = await page.content();
-                  const detail = parseDetailPageHTML(detailHtml);
-
-                  // Only fill in missing fields — don't overwrite existing ones
-                  if (!listing.price && detail.price) {
-                    listing.price = detail.price;
-                    listing.price_numeric = detail.priceNumeric;
-                  }
-                  if (!listing.location && detail.location) {
-                    listing.location = detail.location;
-                    listing.location_county = detail.locationCounty;
-                    listing.location_city = detail.locationCity;
-                    listing.location_neighborhood = detail.locationNeighborhood;
-                  }
-                  if (!listing.size_m2 && detail.sizeM2) {
-                    listing.size_m2 = detail.sizeM2;
-                  }
-                  if (!listing.advertiser_type && detail.advertiserType) {
-                    listing.advertiser_type = detail.advertiserType;
-                  }
-
-                  console.log(
-                    `[Scraper] Enriched ${listing.external_id}: price=${listing.price}, location=${listing.location}, size=${listing.size_m2}`
-                  );
-                } catch (err) {
-                  console.warn(`[Scraper] Failed to enrich ${listing.external_id}:`, err);
-                }
-              }
+            // Prefer the embedded state JSON (has advertiser type + full data,
+            // including for SuperVau/promoted cards). Fall back to HTML card
+            // parsing only if the JSON blob is absent (layout change / block).
+            let pageListings = parseListingsFromSearchJSON(html, category);
+            if (pageListings.length === 0) {
+              pageListings = parseListingsFromHTML(html, category);
             }
+            console.log(`[Scraper] [${category}] [${county || "all"}] Page ${pageNum}: found ${pageListings.length} listings`);
 
             allListings.push(...pageListings);
 
@@ -631,9 +797,15 @@ export async function scrapeSearchPageOnly(
     await randomDelay(300, 600);
 
     const html = await page.content();
-    const listings = parseListingsFromHTML(html, category);
+    // Prefer the embedded state JSON — it carries advertiser type
+    // (isOwnerResidentialSeller) plus full price/location/size, so the monitor
+    // no longer needs to open detail pages. HTML parsing is the fallback.
+    let listings = parseListingsFromSearchJSON(html, category);
     if (listings.length === 0) {
-      console.warn(`[Monitor] [${category}] Parsed 0 listings from HTML. Treating as soft block!`);
+      listings = parseListingsFromHTML(html, category);
+    }
+    if (listings.length === 0) {
+      console.warn(`[Monitor] [${category}] Parsed 0 listings (JSON + HTML). Treating as soft block!`);
       return { listings: [], blocked: true, blockReason: "zero-listings-parsed" };
     }
     console.log(`[Monitor] [${category}] Found ${listings.length} listings on page 1.`);

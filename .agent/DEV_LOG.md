@@ -1,5 +1,22 @@
 # Development Log
 
+## [2026-07-20] Private detection moved to search-page JSON — detail pages eliminated
+
+### 44. We were opening a detail page for EVERY new ad just to classify private vs agency
+- **Symptom / waste**: For each new `external_id`, the monitor did a Playwright navigation to the ad's detail page and looked for "Korisnik nije trgovac" to set `advertiser_type`. That is one full page load per new ad — the dominant source of proxy bandwidth, cycle time, and ShieldSquare exposure. Most new ads are agency, so the vast majority of those fetches only produced a `seen_listings` skip row.
+- **Root cause of the blind spot**: The visible HTML search cards (`article.entity-body`) genuinely do **not** contain the private/agency flag or the poster name, so we assumed classification was detail-only. That is true for the *rendered HTML* but **false for the embedded state JSON**.
+- **Discovery**: Njuškalo server-renders a ~100 KB inline `<script>` (`browseListingsStore`) whose per-listing objects include `isOwnerResidentialSeller` (`true` = private, `false` = agency) plus full `priceFormatted`, `location`, `abstracts` (size/type), `createdAt`, `isPromoted`, and `image` — even for promoted/SuperVau cards. Verified live: `isOwnerResidentialSeller:true` ⇔ "Korisnik nije trgovac" on the detail page; `false` ⇔ agency. `window.__NUXT__`/`__APOLLO_STATE__` are absent.
+- **Fix**:
+  - Added `parseListingsFromSearchJSON(html, category)` in `src/lib/scraper/njuskalo.ts`. Robust extraction: slice from `browseListingsStore`, `split('{"id":')`, keep chunks with `"categorySlug":"nekretnine"` + `"titleSlug"` + `"isOwnerResidentialSeller"`, parse fields with targeted regexes (no fragile whole-blob `JSON.parse`). Maps the flag to `advertiser_type` (`Privatni`/`Agencija`).
+  - `scrapeSearchPageOnly` and `scrapeNjuskalo` now parse via the JSON parser first, with `parseListingsFromHTML` as fallback; removed the detail-page enrichment loop from `scrapeNjuskalo`.
+  - `scripts/monitor.ts` no longer opens detail pages — it classifies directly from `advertiser_type` (private → `listings`, else → `seen_listings`). Removed the `fetchDetailPagePlaywright` import/loop and the `detailBlocked` path. Detail helpers stay exported (capability retained, just uncalled).
+- **Impact (expected)**: Large drop in per-cycle page loads (only 1 search page per category vs 1 + N detail pages), so much lower proxy GB, shorter cycles, and far less ShieldSquare exposure (no detail-page hammering).
+- **Docs**: New reference [`.agent/NJUSKALO_SEARCH_JSON.md`](./NJUSKALO_SEARCH_JSON.md) captures the full blob structure + field→DB mapping; `AGENTS.md` "Advanced Scraping" section updated.
+- **Lesson (promotable)**: On JS-rendered classifieds, always inspect the server-rendered state blob (inline `<script>` / `__NUXT__` / `__APOLLO_STATE__` / `application/json`) before assuming a field is "detail-page only". The visible card HTML is frequently a lossy subset of the data already shipped to the page.
+- **Files**: `src/lib/scraper/njuskalo.ts`, `scripts/monitor.ts`, `.agent/NJUSKALO_SEARCH_JSON.md`, `.agent/AGENTS.md`.
+
+---
+
 ## [2026-07-20] Ad/analytics scripts, not images, were 99% of bandwidth
 
 ### 43. Bandwidth still climbing fast after image/CSS/font blocking

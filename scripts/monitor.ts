@@ -31,7 +31,6 @@ import {
   WORKER_CATEGORIES,
   NJUSKALO_BASE,
   scrapeSearchPageOnly,
-  fetchDetailPagePlaywright,
   randomDelay,
 } from "../src/lib/scraper/njuskalo";
 
@@ -553,85 +552,40 @@ async function runMonitor() {
             return true;
           });
 
-          await dbLog(`[${category}] 🆕 ${uniqueNewListings.length} NEW ads detected on page 1! Checking details...`, "info");
+          await dbLog(`[${category}] 🆕 ${uniqueNewListings.length} NEW ads detected on page 1!`, "info");
 
           const privateListingsToSave = [];
           const seenListingsToSave = [];
-          let detailBlocked = false;
 
-          // Fetch detail pages — use proxy page if available, otherwise fall back to main page
-          const detailFetchPage = detailPage;
+          // Classify directly from the search-page JSON. advertiser_type is
+          // already set by parseListingsFromSearchJSON (isOwnerResidentialSeller),
+          // along with price/location/size/published/promoted — so there is no
+          // need to open detail pages. See .agent/NJUSKALO_SEARCH_JSON.md.
           for (const listing of uniqueNewListings) {
-            if (!listing.url) continue;
+            const isPrivate = listing.advertiser_type === "Privatni";
 
-            try {
-              // Human-like delay between detail page visits (3-6s)
-              await randomDelay(2000, 3500);
-
-              const detail = await fetchDetailPagePlaywright(detailFetchPage, listing.url);
-
-              // Check if bot protection was triggered on detail page
-              if (detail.blocked) {
-                await dbLog(`[${category}] ⚠️ BLOCKED on detail page! Stopping detail fetches for this cycle.`, "error");
-                detailBlocked = true;
-                break;
-              }
-
-              // Enrich the listing with detail page data
-              if (detail.price) {
-                listing.price = detail.price;
-                listing.price_numeric = detail.priceNumeric;
-              }
-              if (detail.location) {
-                listing.location = detail.location;
-                listing.location_county = detail.locationCounty;
-                listing.location_city = detail.locationCity;
-                listing.location_neighborhood = detail.locationNeighborhood;
-              }
-              if (detail.sizeM2) {
-                listing.size_m2 = detail.sizeM2;
-              }
-              if (detail.advertiserType) {
-                listing.advertiser_type = detail.advertiserType;
-              }
-              // Promoted & published date from detail page
-              listing.is_promoted = listing.is_promoted || detail.isPromoted;
-              if (detail.publishedAt) {
-                listing.published_at = detail.publishedAt;
-              }
-
-              const isPrivate = listing.advertiser_type === "Privatni";
-
-              if (isPrivate) {
-                cyclePrivateAds++;
-                privateListingsToSave.push(listing);
-                await dbLog(
-                  `[${category}] 🔑 PRIVATE | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
-                  "success"
-                );
-              } else {
-                // Save agency/non-private ads to seen_listings for skip tracking
-                seenListingsToSave.push({
-                  external_id: listing.external_id,
-                  advertiser_type: listing.advertiser_type || "Agencija",
-                  worker_id: WORKER_ID,
-                });
-                await dbLog(
-                  `[${category}]    Agency  | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
-                  "info"
-                );
-              }
-            } catch (err) {
-              await dbLog(`[${category}] Failed to fetch detail for ${listing.external_id}: ${(err as Error).message}`, "warning");
+            if (isPrivate) {
+              cyclePrivateAds++;
+              privateListingsToSave.push(listing);
+              await dbLog(
+                `[${category}] 🔑 PRIVATE | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
+                "success"
+              );
+            } else {
+              // Track agency/non-private ads in seen_listings for skip tracking
+              seenListingsToSave.push({
+                external_id: listing.external_id,
+                advertiser_type: listing.advertiser_type || "Agencija",
+                worker_id: WORKER_ID,
+              });
+              await dbLog(
+                `[${category}]    Agency  | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
+                "info"
+              );
             }
 
             // Mark this ID as known so we don't re-process it in subsequent categories
             knownIds.add(listing.external_id);
-          }
-
-          // If blocked on detail pages, trigger browser restart like search page block
-          if (detailBlocked) {
-            blocked = true;
           }
 
           // Save ONLY private listings to the main listings table
@@ -662,7 +616,7 @@ async function runMonitor() {
           }
 
           if (privateListingsToSave.length === 0 && seenListingsToSave.length === 0) {
-            await dbLog(`[${category}] No ads to save (all detail fetches failed).`, "warning");
+            await dbLog(`[${category}] No ads to save.`, "warning");
           }
         }
       }
