@@ -76,8 +76,8 @@ try {
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const CATEGORY_DELAY_MS = { min: 15000, max: 45000 }; // 15-45s between categories (human browsing pace)
-const CYCLE_REST_MS = { min: 30000, max: 90000 };      // 30-90s rest between full cycles
+const CATEGORY_DELAY_MS = { min: 6000, max: 17000 }; // 15-45s between categories (human browsing pace)
+const CYCLE_REST_MS = { min: 10000, max: 20000 };      // 30-90s rest between full cycles
 const BLOCKED_BACKOFF_MS = 600000;                      // 10 min backoff if blocked
 
 const USER_AGENTS = [
@@ -417,7 +417,7 @@ async function runMonitor() {
 
             try {
               // Human-like delay between detail page visits (3-6s)
-              await randomDelay(3000, 6000);
+              await randomDelay(2000, 3500);
 
               const detail = await fetchDetailPagePlaywright(detailFetchPage, listing.url);
 
