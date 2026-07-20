@@ -46,7 +46,10 @@ cd "$APP_DIR"
 
 # --- Dependencies ---
 echo "==> Installing npm dependencies..."
-npm ci
+if ! npm ci; then
+  echo "!! npm ci failed (lock file out of sync) — falling back to npm install"
+  npm install
+fi
 
 # --- Playwright Chromium + system libs ---
 echo "==> Installing Playwright Chromium (this may take a few minutes)..."

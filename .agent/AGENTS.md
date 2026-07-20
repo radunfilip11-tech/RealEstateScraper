@@ -48,7 +48,8 @@ src/
 - Supabase browser client uses anon key for public reads.
 - Without generated database types, use `any` casts on Supabase write operations.
 - All UI text is in Croatian (hr).
-- **Windows + Node 24 TLS**: Node 24's bundled CA store may not match the Windows trust store (common with antivirus HTTPS inspection). All npm scripts that talk to Supabase (`dev`, `monitor`, `scrape`, `notify-poll`) run via `scripts/with-system-ca.mjs` which sets `NODE_OPTIONS=--use-system-ca`. VPS/Linux with Node 20 is unaffected. If `npm install` fails with `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, set `NODE_OPTIONS=--use-system-ca` in the shell first.
+- **Windows + Node 24 TLS**: On Windows only, npm scripts run via `scripts/with-system-ca.mjs` which sets `NODE_OPTIONS=--use-system-ca`. **Linux/VPS**: wrapper is a no-op (Node rejects `--use-system-ca` in `NODE_OPTIONS` on Linux — see DEV_LOG 2026-07-20).
+- **Node 20 + Supabase on VPS**: Requires `ws` package and `realtime: { transport: WebSocket }` in `getSupabaseServerClient()` (`server.ts`).
 
 ## Scraper Strategy & Bot Protection Bypass (Njuškalo)
 - **HTML Parsing**: Njuškalo's property cards are wrapped in `<article class="entity-body cf">`. Do **not** split/match on `<li>` tags because inner lists (like prices) will break the regex lazily. Always extract based on the `<article>` wrapper.
@@ -72,15 +73,16 @@ src/
 
 ## Deployment Architecture (Production)
 - **Frontend**: Vercel (free Hobby tier) — `https://real-estate-scraper-sandy.vercel.app`
-- **Workers**: **Contabo Cloud VPS 10** (~€7/mo, 8 GB, Nuremberg) — PM2 manages `monitor-w1`, `monitor-w2`, `notify-poll` via `ecosystem.config.cjs`. Hetzner CX22 was original plan but unavailable for new orders.
-- **VPS setup**: `deploy/vps-setup.sh` (first run) + `deploy/VPS_DEPLOY.md` (full guide). Env template: `env.example` → copy to `.env.local` on VPS.
-- **Scaling**: Pool different sites on same VPS (shared IP is fine — bot protection is per-site). 8 GB fits Njuškalo (2 workers) + 1 worker per extra site. At ~10 sites: 4× Contabo VPS 10 (~€28/mo). Separate IP per site only needed for multiple workers on the **same** site.
-- **VPS is stateless**: All data in Supabase. Provider switch = git clone + `.env.local` + PM2 (~30 min).
+- **Workers**: **Contabo Cloud VPS 4** (`169.58.32.15`, 8 GB, EU) — PM2: `monitor-w1`, `monitor-w2`, `notify-poll` via `ecosystem.config.cjs`. Hetzner was original plan but unavailable for new orders.
+- **VPS setup**: `deploy/vps-setup.sh` + `deploy/VPS_DEPLOY.md`. Env: copy `.env.production.local` → VPS `.env.local` via `scp`.
+- **Env separation**: PC `.env.local` = dev Supabase; VPS `.env.local` = prod Supabase + `APP_ENV=production`; Vercel Production = prod keys.
+- **Scaling**: Pool different sites on same VPS (shared IP OK — bot protection is per-site). 8 GB = Njuškalo (2 workers) + 1 worker/extra site. ~10 sites → 4× Contabo VPS (~€28/mo).
+- **VPS is stateless**: Data in Supabase. Provider switch ≈ 30 min.
 - **Database (Prod)**: Supabase `nekretnine-prod` (`fyhgxulgonnjbzufqljf`, eu-west-3)
 - **Database (Dev)**: Supabase `nekretnine` (`xlaaatbkorktjgbmjtkl`, eu-west-3)
-- **Environment separation**: `APP_ENV=production` hides Monitor tab, blocks clear_db/start/stop APIs. Vercel Production env → prod Supabase keys; Preview env → dev Supabase keys.
 - **Notifications**: PM2 `notify-poll` on VPS (continuous loop), NOT Vercel cron (blocked on Hobby tier).
-- **No auth layer** (single client, security-by-obscurity via URL). Future: add Supabase Auth when multi-user is needed.
+- **Production monitoring**: Client uses Oglasi page. Ops: `/monitor` (logs via `scraper_console_logs`, stats via `scrape_runs`), SSH `pm2 logs`, Supabase tables. Monitor tab hidden from sidebar in prod; Start/Stop blocked on Vercel (workers on VPS only). TODO: read-only Monitor in prod.
+- **No auth layer** (single client). Future: Supabase Auth + hide `/monitor` from client.
 
 ## [2026-06-30] Multi-Worker Scraping Architecture & Latency Tracking (Superseded)
 - Original plan was 3 workers shuffling all categories. **Replaced** by 2-worker weighted split via `WORKER_CATEGORIES` (see [2026-07-01] entry above).

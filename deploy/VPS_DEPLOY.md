@@ -106,9 +106,14 @@ Healthy log output looks like:
 ```bash
 cd ~/nekretnine
 git pull
-npm ci
+npm install    # use npm ci only if lockfile is in sync
 npx playwright install chromium --with-deps   # only if playwright version changed
 pm2 restart all
+```
+
+**Copy prod env from PC:**
+```powershell
+scp ".env.production.local" root@169.58.32.15:~/nekretnine/.env.local
 ```
 
 ## PM2 cheat sheet
@@ -125,6 +130,24 @@ pm2 monit                   # live CPU/RAM dashboard
 
 ## Troubleshooting
 
+### `--use-system-ca is not allowed in NODE_OPTIONS`
+Linux Node rejects this flag. Ensure `scripts/with-system-ca.mjs` only sets it on `win32`. Patch on VPS or `git pull` the fix, then `pm2 restart all`.
+
+### `Node.js 20 detected without native WebSocket support`
+```bash
+npm install ws
+```
+Also need `realtime: { transport: WebSocket }` in `src/lib/supabase/server.ts` (see repo). Then `pm2 restart all`.
+
+### `npm ci` lock file out of sync
+Use `npm install` instead, or run `npm install` on PC, commit `package-lock.json`, then pull on VPS.
+
+### PM2 crash loop (↺ climbing)
+```bash
+pm2 logs monitor-w1 --lines 30 --nostream
+```
+Read the actual error — usually env missing or the two issues above.
+
 ### `Missing NEXT_PUBLIC_SUPABASE_URL`
 `.env.local` is missing or empty. Edit it and `pm2 restart all`.
 
@@ -138,7 +161,7 @@ pm2 restart all
 Normal after aggressive scraping. Workers auto-backoff 10 min. If persistent, check that both workers are running (different category sets).
 
 ### Out of memory (OOM)
-CX22 has 4 GB. If OOM kills occur:
+Contabo VPS 4 has 8 GB. If OOM kills occur:
 ```bash
 pm2 restart all
 ```

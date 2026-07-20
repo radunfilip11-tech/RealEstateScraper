@@ -1,11 +1,102 @@
 # Development Log
 
+## [2026-07-20] Contabo VPS Live — Production Workers Deployed
+
+### 35. VPS provisioned & workers running
+- **Provider**: Contabo **Cloud VPS 4** (8 GB, 4 vCPU, 100 GB SSD) — same tier as old "VPS 10" naming (~€6.88/mo incl. VAT)
+- **Region**: EU (Hub Europe)
+- **IP**: `169.58.32.15`
+- **OS**: Ubuntu 24.04, hostname `vmi3445391`
+- **Stack**: Node 20.20.2, PM2 7.x, Playwright Chromium
+- **PM2 processes**: `monitor-w1`, `monitor-w2`, `notify-poll` via `ecosystem.config.cjs`
+- **Boot persistence**: `pm2 startup` + `pm2 save` configured (`pm2-root.service`)
+- **Repo clone**: `https://github.com/radunfilip11-tech/RealEstateScraper.git` (temporarily **public** for passwordless clone; can revert to private + PAT for `git pull`)
+
+### 36. Production env on VPS (2026-07-20)
+- **Pattern**: Keep **dev** keys in PC `.env.local`; use **`.env.production.local`** locally, copy to VPS as `.env.local` via `scp`
+- **VPS `.env.local`**: `APP_ENV=production` + Supabase **nekretnine-prod** (`fyhgxulgonnjbzufqljf`) + `TELEGRAM_BOT_TOKEN`
+- **Verified**: `grep SUPABASE_URL` shows prod ref; logs show `[W1] Database has 0 known listings` on first prod run (empty prod DB — expected vs ~30k on dev)
+- **Local dev unchanged**: PC still uses dev project `xlaaatbkorktjgbmjtkl`
+
+### 37. Deployment blockers & fixes (hints for next time)
+
+| # | Problem | Symptom | Fix |
+|---|---------|---------|-----|
+| 1 | **Private GitHub repo** | `Username for 'https://github.com':` on clone | Make repo public temporarily, or use PAT in clone URL, or deploy key |
+| 2 | **`npm ci` lock mismatch** | `Missing: @emnapi/* from lock file` on Linux | Run `npm install` on VPS (or sync lockfile on PC). `deploy/vps-setup.sh` now falls back to `npm install` |
+| 3 | **`with-system-ca.mjs` on Linux** | `/usr/bin/node: --use-system-ca is not allowed in NODE_OPTIONS` → PM2 crash loop | Only set `NODE_OPTIONS=--use-system-ca` when `process.platform === 'win32'`. Windows-only TLS fix |
+| 4 | **Supabase on Node 20** | `Node.js 20 detected without native WebSocket support` | Add `ws` dependency + pass `realtime: { transport: WebSocket }` in `src/lib/supabase/server.ts`. `monitor.ts` now uses `getSupabaseServerClient()` |
+| 5 | **Wrong directory on VPS** | `cp: cannot stat 'env.example'` | Always `cd ~/nekretnine` first — not `~` |
+| 6 | **SSH disconnect** | `client_loop: send disconnect: Connection reset` | Files persist on VPS; SSH back in and continue. Run long commands in SSH, not local PowerShell |
+| 7 | **Ran setup on Windows** | `Permission denied` for `~/nekretnine` | Clone/install only on **VPS** (`root@vmi3445391`), not `PS C:\...>` |
+| 8 | **Contabo login confusion** | `root` fails on my.contabo.com | Panel login = **email** + Contabo account password. VPS SSH = `root` + **VPS root password** (set at order) |
+| 9 | **Contabo KYC** | Order on hold after payment | Reply to support email with ID + utility bill; ~hours to approve |
+| 10 | **Monitor "Stopped" on Vercel prod** | `/api/monitor/control` status checks **local PID files** on Vercel, not VPS PM2 | Expected. Use `/monitor` logs (Supabase `scraper_console_logs`), `/api/monitor/stats`, or `pm2 logs` on VPS |
+
+### 38. Files changed during VPS deployment (local repo)
+- `scripts/with-system-ca.mjs` — Windows-only `--use-system-ca`
+- `src/lib/supabase/server.ts` — `ws` transport for Node < 22
+- `scripts/monitor.ts` — uses `getSupabaseServerClient()` instead of raw `createClient`
+- `package.json` — added `ws` dependency
+- `deploy/vps-setup.sh` — `npm ci` → fallback `npm install`
+- `.env.production.local` — **[local only, gitignored]** template for VPS prod keys
+
+### 39. Ops commands (VPS cheat sheet)
+```bash
+ssh root@169.58.32.15
+pm2 status
+pm2 logs monitor-w1 --lines 30 --nostream
+pm2 stop all          # pause workers
+pm2 start ecosystem.config.cjs
+pm2 restart all       # after .env.local or git pull
+pm2 save
+grep SUPABASE_URL ~/nekretnine/.env.local
+```
+
+**Update VPS env from PC:**
+```powershell
+scp ".env.production.local" root@169.58.32.15:~/nekretnine/.env.local
+```
+
+**Update VPS code:**
+```bash
+cd ~/nekretnine && git pull && npm install && pm2 restart all
+```
+
+### 40. Production monitoring workflow (agreed, not all implemented)
+- **Client view**: Vercel prod URL → Oglasi (listings updating = healthy)
+- **Ops view**: `/monitor` page still works (logs via `scraper_console_logs`, stats via `scrape_runs`) but **hidden from sidebar** when `APP_ENV=production`
+- **Start/Stop on prod Vercel**: Correctly blocked — workers managed by PM2 on VPS only
+- **TODO (future)**: Re-show Monitor tab in prod as **read-only** (hide Start/Stop; infer worker status from `/api/monitor/stats` not PID files)
+- **TODO (future)**: Simple auth so client doesn't see `/monitor`
+
+### 41. Contabo order notes
+- Plan: **Cloud VPS 4**, Ubuntu 24.04, no auto-backup add-on (stateless workers; data in Supabase)
+- Skip Plesk/cPanel/Windows — Ubuntu only
+- `*** System restart required ***` after kernel upgrade — safe to ignore short-term; reboot when convenient
+
+### Status (2026-07-20)
+- ✅ VPS workers running on **production** Supabase
+- ✅ PM2 survives reboot
+- ⏳ Confirm Vercel Production env vars match prod Supabase (if not already)
+- ⏳ Optional: notification_filters migration dev → prod
+- ⏳ Optional: read-only Monitor tab in production
+- ⏳ Push local fixes (`with-system-ca`, `server.ts`, `ws`) to GitHub so VPS can `git pull` cleanly
+
+### Lessons Learned
+1. **`with-system-ca.mjs` must be platform-gated** — Linux Node rejects `--use-system-ca` in `NODE_OPTIONS`; crashes all PM2 workers instantly.
+2. **Installing `ws` is not enough** — `@supabase/supabase-js` on Node 20 requires explicit `realtime: { transport: WebSocket }` in client options.
+3. **`.env.production.local` + `scp`** is easiest way to set VPS secrets without typing in nano.
+4. **Never paste `service_role` keys in chat** — rotate in Supabase if exposed.
+5. **Prod DB starts empty** — 0 listings on first connect is correct; dev listing counts do not carry over.
+6. **PM2 `stop all` + `save`** pauses workers across reboot; use when testing locally against dev without VPS competing.
+
 ## [2026-07-16] VPS Provider Decision — Contabo (Conclusions)
 
 ### 34. Provider evaluation & final decision
 - **Hetzner**: Originally planned (CX22), but **unavailable** for new instances (hardware shortage, Jun 2026).
 - **OVH vs Contabo**: Evaluated for 1-site start and 10-site scale.
-- **Decision**: **Contabo Cloud VPS 10** (8 GB, Nuremberg, Ubuntu 24.04) — ~€7/mo incl. VAT.
+- **Decision**: **Contabo Cloud VPS 4** (8 GB, EU, Ubuntu 24.04) — ~€7/mo incl. VAT. *(Contabo renamed "VPS 10" → "VPS 4" in 2026.)*
 
 ### Conclusions (agreed in planning dialogue)
 1. **VPS role**: Workers only (`monitor-w1`, `monitor-w2`, `notify-poll`). Dashboard stays on Vercel; data in Supabase. VPS is stateless — switching providers takes ~30 min (git clone + `.env.local` + PM2).
@@ -14,14 +105,14 @@
 4. **Pause time reuse**: Idle CPU between Njuškalo cycles can run other sites on the **same VPS**. RAM is NOT freed (Chromium stays open). Rule: Njuškalo (2 workers) + **1 worker per additional site** on 8 GB VPS.
 5. **Separate IP per site**: **Not required** for different sites — bot protection is per-site. Separate IPs matter for **multiple workers on the same site**, not cross-site scraping.
 6. **Scaling to 10 sites** (projected, incl. ~25% VAT):
-   - **Budget pooled** (4× Contabo VPS 10): ~€28/mo — recommended
+   - **Budget pooled** (4× Contabo VPS 4): ~€28/mo — recommended
    - **1 VPS per site** (OVH cheapest for isolation): ~€52/mo — overkill unless same-site worker scaling
    - **Not on one VPS**: RAM limit (~3 sites per 8 GB box max)
 7. **Switch triggers**: Constant PM2 restarts → check RAM; cycles 3× slower for days → try OVH VPS-2; Hetzner available again → compare CX33.
 
 ### Status
-- Deploy artifacts ready (`ecosystem.config.cjs`, `deploy/vps-setup.sh`, `env.example`) — **not yet pushed to GitHub**.
-- **Next step**: Order Contabo VPS 10 → push deploy files → SSH setup.
+- ~~Deploy artifacts ready — not yet pushed~~ → Pushed in commit `9fef185` ("preparing for vps")
+- ~~Order Contabo~~ → **Done** — see [2026-07-20] entry
 
 ## [2026-07-13] VPS Deployment Artifacts Added
 
@@ -98,13 +189,10 @@
 - **Vercel CLI**: Linked local project via `npx vercel link --yes --project real-estate-scraper`. Note: `vercel link` command adds a `VERCEL_OIDC_TOKEN` to `.env.local` — this is harmless and short-lived
 - **Git push**: Committed vercel.json change (`1d55d5a`) and deployed via `npx vercel --prod --yes`
 
-### 28. VPS Setup Plan (Not Yet Executed)
-- **Recommended provider**: Hetzner CX22 (~€5/mo, EU datacenter)
-- **Stack on VPS**: Node.js 20 + PM2 + Playwright Chromium
-- **PM2 processes**: `monitor-w1` (Worker 1), `monitor-w2` (Worker 2), `notify-poll` (continuous notification poller)
-- **Env**: `.env.local` on VPS with production Supabase keys + `APP_ENV=production`
-- **Auto-restart**: `pm2 startup` + `pm2 save` ensures workers survive server reboots
-- **Code updates**: `git pull` on VPS → `pm2 restart all`
+### 28. VPS Setup Plan — **COMPLETED** (see [2026-07-20] DEV_LOG entry)
+- ~~Recommended provider: Hetzner CX22~~ → **Contabo Cloud VPS 4**, IP `169.58.32.15`
+- Stack on VPS: Node.js 20 + PM2 + Playwright Chromium — **live**
+- PM2 processes: `monitor-w1`, `monitor-w2`, `notify-poll` — **running on prod Supabase**
 
 ### Lessons Learned
 1. **Vercel Hobby blocks crons faster than daily** — `*/5 * * * *` in `vercel.json` prevents ALL deployments, not just the cron. Must remove the config entirely, not just disable.

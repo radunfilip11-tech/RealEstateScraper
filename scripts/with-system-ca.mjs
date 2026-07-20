@@ -1,8 +1,7 @@
 /**
- * Runs a Node command with NODE_OPTIONS=--use-system-ca.
- * Needed on Windows + Node 24 where bundled CAs don't match the system trust store
- * (common with antivirus HTTPS inspection). NODE_OPTIONS is used (not a CLI flag)
- * so tsx child processes inherit the setting.
+ * Spawns a Node child process. On Windows + Node 24, sets NODE_OPTIONS=--use-system-ca
+ * so tsx inherits the system CA store (fixes UNABLE_TO_VERIFY_LEAF_SIGNATURE).
+ * Linux/macOS: no-op — Node rejects --use-system-ca in NODE_OPTIONS on Linux anyway.
  */
 import { spawn } from 'child_process';
 import path from 'path';
@@ -12,14 +11,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 const args = process.argv.slice(2);
 
-const existing = process.env.NODE_OPTIONS?.trim() ?? '';
-const nodeOptions = existing.includes('--use-system-ca')
-  ? existing
-  : `${existing} --use-system-ca`.trim();
+const env = { ...process.env };
+
+if (process.platform === 'win32') {
+  const existing = env.NODE_OPTIONS?.trim() ?? '';
+  if (!existing.includes('--use-system-ca')) {
+    env.NODE_OPTIONS = `${existing} --use-system-ca`.trim();
+  }
+}
 
 const child = spawn(process.execPath, args, {
   stdio: 'inherit',
-  env: { ...process.env, NODE_OPTIONS: nodeOptions },
+  env,
   cwd: projectRoot,
   shell: false,
 });

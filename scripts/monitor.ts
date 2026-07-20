@@ -36,13 +36,12 @@ import {
 } from "../src/lib/scraper/njuskalo";
 
 // ---------------------------------------------------------------------------
-// Supabase client (direct, not using the Next.js server helper which requires
-// Next.js runtime). We use the service role key for full write access.
+// Supabase client via server helper (service role key, Node 20 ws transport).
 // ---------------------------------------------------------------------------
-import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 import * as path from "path";
 import * as fs from "fs";
+import { getSupabaseServerClient } from "../src/lib/supabase/server";
 
 // Load environment variables from .env.local
 dotenv.config({ path: path.resolve(__dirname, "../.env.local") });
@@ -66,15 +65,13 @@ const WORKER_TAG = `[W${WORKER_ID}]`;
 // Define PID file path (per-worker)
 const PID_FILE = path.resolve(__dirname, `../monitor-${WORKER_ID}.pid`);
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
+let supabase;
+try {
+  supabase = getSupabaseServerClient();
+} catch (err) {
   console.error(`${WORKER_TAG} Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local`);
   process.exit(1);
 }
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // ---------------------------------------------------------------------------
 // Configuration
