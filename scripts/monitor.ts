@@ -146,6 +146,9 @@ const BLOCKED_AD_HOSTS = [
   "criteo.com",
   "taboola.com",
   "outbrain.com",
+  "privacy-center.org",
+  "dotmetrics.net",
+  "static.njuskalo.hr/dist/",
 ];
 
 /**
