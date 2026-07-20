@@ -54,11 +54,10 @@ src/
 ## Scraper Strategy & Bot Protection Bypass (Njuškalo)
 - **HTML Parsing**: Njuškalo's property cards are wrapped in `<article class="entity-body cf">`. Do **not** split/match on `<li>` tags because inner lists (like prices) will break the regex lazily. Always extract based on the `<article>` wrapper.
 - **Bot Protection (ShieldSquare)**: Repeatedly hitting the same category in headless Playwright triggers Captchas. Mitigations:
-  - **IPRoyal residential proxy** for detail page fetches (search pages stay on VPS native IP to save bandwidth). Configured via `PROXY_HOST/PORT/USER/PASS` env vars. Images/CSS/fonts blocked on proxy context (~90% bandwidth reduction).
+  - **IPRoyal residential proxy** for ALL Njuškalo traffic (`PROXY_HOST/PORT/USER/PASS`). Sticky: `{pass}_session-{8chars}_lifetime-30m` (exactly 8 alphanumeric). Country via `_country-hr` in password. Search+detail share **one** context. **Block images/CSS/fonts/media on search AND detail** (scripts/XHR only — listing thumbnails burned 2 GB/30 min when left on). Startup egress check — exit on 402. Diagnose: `npx tsx scripts/test-proxy.ts`. Pay-per-GB is expensive at current scan rates; prefer unlimited ISP proxies for 24/7.
   - `puppeteer-extra-plugin-stealth` + rotating User-Agents
-  - 60s minimum cycle duration when cycles finish too fast (no new ads = robotic polling pattern)
-  - 2 workers with different category subsets (not identical loops)
-  - Inter-category delays (`CATEGORY_DELAY_MS`) and cycle rest (`CYCLE_REST_MS`)
+  - Adaptive min cycle duration + 10-min backoff on real ShieldSquare block
+  - 2 workers with different category subsets; inter-category + cycle rest delays
   - Never spawn workers with visible Windows console (QuickEdit freeze risk)
 - **Supabase pagination**: Default query limit is 1000 rows. Monitor must paginate when loading `listings`/`seen_listings` external_ids for dedup.
 - **Numeric column types**: Supabase JSON may return `worker_id` as string — use `Number()` when filtering.

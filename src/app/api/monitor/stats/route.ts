@@ -116,7 +116,7 @@ export async function GET() {
     // -----------------------------------------------------------------------
     const { data: recentRunsRaw, error: runsError } = await supabase
       .from("scrape_runs")
-      .select("started_at, worker_id, cycle_duration_s, new_listings, status")
+      .select("started_at, worker_id, cycle_duration_s, new_listings, status, proxy_bytes")
       .gte("started_at", twentyFourHoursAgo)
       .order("started_at", { ascending: false })
       .limit(1000);
@@ -324,7 +324,21 @@ export async function GET() {
       };
     }
 
+    // -----------------------------------------------------------------------
+    // 5. Proxy bandwidth stats (approximate, via Content-Length in monitor.ts)
+    // -----------------------------------------------------------------------
+    const totalProxyBytes24h = (recentRuns || []).reduce(
+      (sum: number, r: any) => sum + (r.proxy_bytes || 0),
+      0
+    );
+    const proxyMb24h = totalProxyBytes24h / (1024 * 1024);
+    const proxyProjectedGbPerMonth = (totalProxyBytes24h * 30) / (1024 * 1024 * 1024);
+
     return NextResponse.json({
+      proxy: {
+        mb24h: proxyMb24h,
+        projectedGbPerMonth: proxyProjectedGbPerMonth,
+      },
       latency: {
         avgMs: avgLatencyMs,
         minMs: minLatencyMs,

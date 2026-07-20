@@ -13,6 +13,7 @@ interface LogEntry {
 }
 
 interface StatsData {
+  proxy?: { mb24h: number; projectedGbPerMonth: number };
   latency: {
     avgMs: number;
     minMs: number;
@@ -240,7 +241,7 @@ export default function MonitorDashboard() {
       </div>
 
       {/* Stats Panel */}
-      <div className="grid grid-cols-5 gap-4 mb-4">
+      <div className="grid grid-cols-6 gap-4 mb-4">
         <div
           className="bg-[#0f172a] text-white p-4 rounded-xl shadow-sm border border-slate-700 cursor-pointer hover:bg-slate-800 transition-colors"
           onClick={() => setShowLatencyDetails(!showLatencyDetails)}
@@ -374,6 +375,15 @@ export default function MonitorDashboard() {
             {formatDuration(stats?.latency?.minMs || 0)} <span className="text-slate-500 font-normal">/</span> {formatDuration(stats?.latency?.maxMs || 0)}
           </div>
           <div className="text-[10px] text-slate-500 mt-1">min i max latencija</div>
+        </div>
+        <div className="bg-[#0f172a] text-white p-4 rounded-xl shadow-sm border border-slate-700">
+          <div className="text-slate-400 text-xs font-medium mb-1">Proxy potrošnja</div>
+          <div className="text-2xl font-bold text-cyan-400">
+            {Math.round(stats?.proxy?.mb24h || 0)} MB
+          </div>
+          <div className="text-[10px] text-slate-500 mt-1">
+            ≈ {(stats?.proxy?.projectedGbPerMonth || 0).toFixed(1)} GB / mjesec (procjena)
+          </div>
         </div>
       </div>
 

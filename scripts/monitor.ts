@@ -88,7 +88,9 @@ const USER_AGENTS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Proxy configuration (IPRoyal residential proxy for detail page fetches)
+// Proxy configuration (IPRoyal residential — ALL Njuškalo traffic)
+// Sticky format: password_country-XX_session-XXXXXXXX_lifetime-30m
+// Docs: session ID MUST be exactly 8 alphanumeric chars, or sticky is ignored.
 // ---------------------------------------------------------------------------
 const PROXY_HOST = process.env.PROXY_HOST || "";
 const PROXY_PORT = process.env.PROXY_PORT || "";
@@ -96,20 +98,72 @@ const PROXY_USER = process.env.PROXY_USER || "";
 const PROXY_PASS = process.env.PROXY_PASS || "";
 const PROXY_ENABLED = !!(PROXY_HOST && PROXY_PORT && PROXY_USER && PROXY_PASS);
 
-/** Generate a unique session ID for IPRoyal IP rotation. Each session = different residential IP. */
-function proxySessionPass(): string {
-  const sessionId = `s${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  return `${PROXY_PASS}_session-${sessionId}`;
+/** Strip prior sticky tags so we never duplicate _session/_lifetime on rotate. */
+function stripStickyTags(pass: string): string {
+  return pass
+    .replace(/_session-[a-zA-Z0-9]+/g, "")
+    .replace(/_lifetime-[0-9]+[smhd]/gi, "");
 }
 
-/** Resource types to block on proxy detail pages to save bandwidth (~90% reduction). */
+/** IPRoyal requires exactly 8 alphanumeric characters for sticky sessions. */
+function makeSessionId(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let id = "";
+  for (let i = 0; i < 8; i++) {
+    id += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return id;
+}
+
+/**
+ * Build sticky-session password. Same sessionId = same residential IP.
+ * Lifetime 30m covers a full cycle + backoff without mid-cycle IP flips.
+ */
+function proxySessionPass(sessionId: string): string {
+  const base = stripStickyTags(PROXY_PASS);
+  return `${base}_session-${sessionId}_lifetime-30m`;
+}
+
+/** Heavy assets to abort on ALL proxy pages — listing HTML/JS is enough to scrape. */
 const BLOCKED_RESOURCE_TYPES = ["image", "stylesheet", "font", "media", "other"];
+
+/**
+ * Apply bandwidth saver to a page. Keeps document/script/xhr/fetch so Vue can
+ * still render listing cards; drops images/CSS/fonts (~90% of page weight).
+ */
+async function applyBandwidthSaver(pg: any): Promise<void> {
+  await pg.route("**/*", (route: any) => {
+    const resourceType = route.request().resourceType();
+    if (BLOCKED_RESOURCE_TYPES.includes(resourceType)) {
+      return route.abort();
+    }
+    return route.continue();
+  });
+}
 
 // Helper to log to both console and Supabase
 async function dbLog(message: string, level: "info" | "success" | "warning" | "error" = "info") {
   const taggedMessage = `${WORKER_TAG} ${message}`;
   console.log(taggedMessage);
   await (supabase as any).from("scraper_console_logs").insert({ message: taggedMessage, level });
+}
+
+// ---------------------------------------------------------------------------
+// Bandwidth metering — approximate bytes transferred per cycle (via
+// Content-Length response headers). No CDP needed; resets every cycle so
+// scrape_runs.proxy_bytes reflects one cycle's traffic for the dashboard.
+// ---------------------------------------------------------------------------
+let cycleProxyBytes = 0;
+
+function attachByteCounter(pg: any): void {
+  pg.on("response", (res: any) => {
+    try {
+      const len = res.headers()["content-length"];
+      if (len) cycleProxyBytes += parseInt(len, 10) || 0;
+    } catch {
+      /* ignore — best-effort metering only */
+    }
+  });
 }
 
 
@@ -170,59 +224,75 @@ async function runMonitor() {
   };
 
   /**
-   * Create the proxy-enabled browser context for detail page fetches.
-   * Blocks images/CSS/fonts to save proxy bandwidth (~90% reduction).
-   * Returns null if proxy is not configured.
+   * Single proxy context + two pages (search + detail).
+   * Same context = shared cookies + same sticky residential IP.
+   * Previous dual-context setup used different sessions → different IPs and
+   * no shared ShieldSquare cookies → instant re-blocks.
    */
-  async function createProxyDetailContext(br: any, ua: string): Promise<{ ctx: any; pg: any } | null> {
+  async function createProxyBundle(
+    br: any,
+    ua: string,
+    sessionId: string,
+  ): Promise<{ ctx: any; searchPage: any; detailPage: any; sessionId: string } | null> {
     if (!PROXY_ENABLED) return null;
 
-    const proxyServer = `http://${PROXY_HOST}:${PROXY_PORT}`;
     const ctx = await br.newContext({
       ...BASE_CONTEXT_OPTS,
       userAgent: ua,
       proxy: {
-        server: proxyServer,
+        server: `http://${PROXY_HOST}:${PROXY_PORT}`,
         username: PROXY_USER,
-        password: proxySessionPass(),
+        password: proxySessionPass(sessionId),
       },
     });
 
-    const pg = await ctx.newPage();
+    const searchPg = await ctx.newPage();
+    const detailPg = await ctx.newPage();
 
-    // Block images, CSS, fonts, and media to save proxy bandwidth (~90% reduction).
-    await pg.route("**/*", (route: any) => {
-      const resourceType = route.request().resourceType();
-      if (BLOCKED_RESOURCE_TYPES.includes(resourceType)) {
-        return route.abort();
-      }
-      return route.continue();
-    });
+    // Block heavy assets on BOTH pages — search thumbnails were burning GBs.
+    // Scripts/XHR still load so Vue listing cards can render for parsing.
+    await applyBandwidthSaver(searchPg);
+    await applyBandwidthSaver(detailPg);
+    attachByteCounter(searchPg);
+    attachByteCounter(detailPg);
 
-    return { ctx, pg };
+    return { ctx, searchPage: searchPg, detailPage: detailPg, sessionId };
   }
 
-  /**
-   * Create the proxy-enabled browser context for search pages.
-   * Does NOT block assets — search pages need full Vue rendering.
-   * Returns null if proxy is not configured.
-   */
-  async function createProxySearchContext(br: any, ua: string): Promise<{ ctx: any; pg: any } | null> {
-    if (!PROXY_ENABLED) return null;
-
-    const proxyServer = `http://${PROXY_HOST}:${PROXY_PORT}`;
-    const ctx = await br.newContext({
-      ...BASE_CONTEXT_OPTS,
-      userAgent: ua,
-      proxy: {
-        server: proxyServer,
-        username: PROXY_USER,
-        password: proxySessionPass(),
-      },
-    });
-
-    const pg = await ctx.newPage();
-    return { ctx, pg };
+  /** Verify egress IP through the sticky session (fails loud if proxy broken). */
+  async function verifyProxyEgress(pg: any): Promise<string | null> {
+    try {
+      const resp = await pg.goto("https://ipv4.icanhazip.com", {
+        waitUntil: "domcontentloaded",
+        timeout: 20000,
+      });
+      // IPRoyal returns 402 when the account has no traffic credit left
+      if (resp && resp.status() === 402) {
+        await dbLog(
+          `❌ Proxy HTTP 402 Payment Required — IPRoyal account has no credit/bandwidth. Top up at dashboard.iproyal.com`,
+          "error",
+        );
+        return null;
+      }
+      const ip = ((await pg.textContent("body")) || "").trim();
+      // Tunnel failures sometimes land on empty/error pages
+      if (!ip || ip.length > 45 || /error|denied|payment/i.test(ip)) {
+        await dbLog(`Proxy IP check returned unexpected body: "${ip.slice(0, 80)}"`, "error");
+        return null;
+      }
+      return ip;
+    } catch (err) {
+      const msg = (err as Error).message || "";
+      if (/ERR_TUNNEL|ERR_PROXY|402/.test(msg)) {
+        await dbLog(
+          `❌ Proxy tunnel failed (${msg.split("\n")[0]}). Check IPRoyal balance + credentials.`,
+          "error",
+        );
+      } else {
+        await dbLog(`Proxy IP check failed: ${msg}`, "error");
+      }
+      return null;
+    }
   }
 
   let browser = await chromium.launch({
@@ -230,31 +300,30 @@ async function runMonitor() {
     args: BROWSER_ARGS,
   });
 
-  const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+  let userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+  let stickySessionId = makeSessionId();
 
-  // Main context (VPS native IP) — fallback when proxy is not configured
+  // Native-IP fallback context (only used when PROXY_* not set)
   let context = await browser.newContext({
     ...BASE_CONTEXT_OPTS,
     userAgent,
   });
-
   let page = await context.newPage();
+  attachByteCounter(page);
 
-  // Proxy contexts (residential IP)
-  let proxyDetailCtx = await createProxyDetailContext(browser, userAgent);
-  let proxySearchCtx = await createProxySearchContext(browser, userAgent);
-
-  // When proxy is enabled, use proxy pages for everything
-  let searchPage = proxySearchCtx?.pg || page;
-  let detailPage = proxyDetailCtx?.pg || page;
+  let proxyBundle = await createProxyBundle(browser, userAgent, stickySessionId);
+  let searchPage = proxyBundle?.searchPage || page;
+  let detailPage = proxyBundle?.detailPage || page;
 
   await dbLog(`Browser launched. User-Agent: ${userAgent.substring(0, 50)}...`, "info");
-  if (PROXY_ENABLED) {
-    await dbLog(`🌐 Proxy ENABLED: ${PROXY_HOST}:${PROXY_PORT} (ALL traffic via residential IP)`, "success");
+  if (PROXY_ENABLED && proxyBundle) {
+    await dbLog(
+      `🌐 Proxy ENABLED: ${PROXY_HOST}:${PROXY_PORT} (sticky session ${stickySessionId})`,
+      "success",
+    );
   } else {
-    await dbLog(`⚠️  Proxy NOT configured — all traffic via VPS native IP`, "warning");
+    await dbLog(`⚠️  Proxy NOT configured — all traffic via native IP`, "warning");
   }
-  await dbLog("", "info");
 
   // Graceful shutdown
   let shuttingDown = false;
@@ -262,8 +331,7 @@ async function runMonitor() {
     if (shuttingDown) return;
     shuttingDown = true;
     await dbLog("Shutting down gracefully...", "warning");
-    try { if (proxyDetailCtx) await proxyDetailCtx.ctx.close(); } catch { /* ignore */ }
-    try { if (proxySearchCtx) await proxySearchCtx.ctx.close(); } catch { /* ignore */ }
+    try { if (proxyBundle) await proxyBundle.ctx.close(); } catch { /* ignore */ }
     try { await context.close(); } catch { /* ignore */ }
     try { await browser.close(); } catch { /* ignore */ }
     await dbLog(`Final stats: ${totalCycles} cycles, ${totalNewAds} new ads found, ${totalPrivateAds} private ads. Uptime: ${formatUptime()}`, "success");
@@ -276,6 +344,22 @@ async function runMonitor() {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+
+  // Verify proxy BEFORE scraping — never fall through to native IP when PROXY_* is set
+  if (PROXY_ENABLED && proxyBundle) {
+    const egressIp = await verifyProxyEgress(searchPage);
+    if (egressIp) {
+      await dbLog(`🌐 Egress IP: ${egressIp}`, "success");
+    } else {
+      await dbLog(
+        `🛑 Proxy dead at startup — refusing to scrape on native IP (would burn it). Fix IPRoyal billing, then restart.`,
+        "error",
+      );
+      await shutdown();
+      return;
+    }
+  }
+  await dbLog("", "info");
 
   // -----------------------------------------------------------------------
   // Infinite loop
@@ -293,6 +377,7 @@ async function runMonitor() {
     let cycleNewAds = 0;
     let cyclePrivateAds = 0;
     let blocked = false;
+    cycleProxyBytes = 0;
 
     await dbLog(`\n${"═".repeat(60)}`, "info");
     await dbLog(`Cycle #${totalCycles} starting — ${new Date().toLocaleString("hr-HR")} (Uptime: ${formatUptime()})`, "info");
@@ -351,41 +436,77 @@ async function runMonitor() {
       // Scrape search page (uses proxy when available, VPS IP otherwise)
       const result = await scrapeSearchPageOnly(searchPage, category);
 
+      let softMiss = false;
+
       if (result.blocked) {
-        await dbLog(`⚠️  BLOCKED by ShieldSquare! Backing off for ${BLOCKED_BACKOFF_MS / 60000} minutes...`, "error");
-        blocked = true;
+        const reason = result.blockReason || "unknown";
+        const isProxyDead = /ERR_TUNNEL|ERR_PROXY|402|tunnel/i.test(reason);
+        // "No cards rendered" / "0 listings parsed" are often just a slow proxy
+        // hop or a genuinely empty category — NOT proof of ShieldSquare. Treating
+        // them as a real block used to trigger a full browser restart + new
+        // sticky IP for every one of these, re-downloading everything for
+        // nothing. Only rotate/backoff on an actual ShieldSquare/Captcha hit.
+        const isSoftMiss = reason === "no-cards-timeout" || reason === "zero-listings-parsed";
 
-        // Restart browser with a new identity
-        try { if (proxyDetailCtx) await proxyDetailCtx.ctx.close(); } catch { /* ignore */ }
-        try { if (proxySearchCtx) await proxySearchCtx.ctx.close(); } catch { /* ignore */ }
-        try { await context.close(); } catch { /* ignore */ }
-        try { await browser.close(); } catch { /* ignore */ }
+        if (isProxyDead) {
+          await dbLog(
+            `🛑 Proxy tunnel dead mid-run (${reason}). Stopping worker — top up IPRoyal, then restart.`,
+            "error",
+          );
+          await shutdown();
+          break;
+        }
 
-        await randomDelay(BLOCKED_BACKOFF_MS, BLOCKED_BACKOFF_MS + 60000);
+        if (isSoftMiss) {
+          softMiss = true;
+          await dbLog(`[${category}] ⚠️  Soft miss (${reason}) — skipping category, no restart.`, "warning");
+        } else {
+          await dbLog(
+            `⚠️  BLOCKED (${reason})! Rotating sticky IP + backing off ${BLOCKED_BACKOFF_MS / 60000} min...`,
+            "error",
+          );
+          blocked = true;
 
-        // Relaunch with a new user agent
-        const newUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-        browser = await chromium.launch({
-          headless: true,
-          args: BROWSER_ARGS,
-        });
-        context = await browser.newContext({
-          ...BASE_CONTEXT_OPTS,
-          userAgent: newUA,
-        });
-        page = await context.newPage();
+          // Close immediately so we don't keep hammering a burned IP during backoff
+          try { if (proxyBundle) await proxyBundle.ctx.close(); } catch { /* ignore */ }
+          try { await context.close(); } catch { /* ignore */ }
+          try { await browser.close(); } catch { /* ignore */ }
+          proxyBundle = null;
 
-        // Recreate proxy contexts
-        proxyDetailCtx = await createProxyDetailContext(browser, newUA);
-        proxySearchCtx = await createProxySearchContext(browser, newUA);
-        searchPage = proxySearchCtx?.pg || page;
-        detailPage = proxyDetailCtx?.pg || page;
+          await randomDelay(BLOCKED_BACKOFF_MS, BLOCKED_BACKOFF_MS + 60000);
 
-        await dbLog(`Browser restarted with new UA: ${newUA.substring(0, 50)}...`, "info");
-        break; // Restart the cycle
+          // New UA + new sticky session (= new residential IP)
+          userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+          stickySessionId = makeSessionId();
+          browser = await chromium.launch({
+            headless: true,
+            args: BROWSER_ARGS,
+          });
+          context = await browser.newContext({
+            ...BASE_CONTEXT_OPTS,
+            userAgent,
+          });
+          page = await context.newPage();
+          attachByteCounter(page);
+          proxyBundle = await createProxyBundle(browser, userAgent, stickySessionId);
+          searchPage = proxyBundle?.searchPage || page;
+          detailPage = proxyBundle?.detailPage || page;
+
+          await dbLog(
+            `Browser restarted — UA: ${userAgent.substring(0, 40)}... session: ${stickySessionId}`,
+            "info",
+          );
+          if (proxyBundle) {
+            const egressIp = await verifyProxyEgress(searchPage);
+            if (egressIp) await dbLog(`🌐 New egress IP: ${egressIp}`, "success");
+          }
+          break; // End this cycle early — resumes on the next loop iteration
+        }
       }
 
-      if (result.listings.length === 0) {
+      if (softMiss) {
+        // Already logged above — just fall through to category_scans + delay below.
+      } else if (result.listings.length === 0) {
         await dbLog(`[${category}] No listings found, skipping.`, "info");
       } else {
         // Find truly new ads
@@ -537,13 +658,16 @@ async function runMonitor() {
     totalPrivateAds += cyclePrivateAds;
     const cycleDuration = Math.round((Date.now() - cycleStart) / 1000);
 
+    const cycleMB = cycleProxyBytes / (1024 * 1024);
+
     await dbLog(`\n${"─".repeat(60)}`, "info");
     await dbLog(`Cycle #${totalCycles} complete in ${cycleDuration}s`, "info");
     await dbLog(`  This cycle: ${cycleNewAds} private ads saved`, "success");
     await dbLog(`  All time:   ${totalNewAds} private ads saved (${totalCycles} cycles)`, "info");
+    await dbLog(`  Proxy traffic: ${cycleMB.toFixed(1)} MB (approx, via Content-Length)`, "info");
     await dbLog(`${"─".repeat(60)}`, "info");
 
-    // Log scrape run to database (includes worker_id and cycle_duration_s for stats)
+    // Log scrape run to database (includes worker_id, cycle_duration_s, proxy_bytes for stats)
     await (supabase as any).from("scrape_runs").insert({
       source: "njuskalo",
       status: blocked ? "error" : "success",
@@ -552,6 +676,7 @@ async function runMonitor() {
       error_message: blocked ? "Bot protection detected — browser restarted" : null,
       worker_id: WORKER_ID,
       cycle_duration_s: cycleDuration,
+      proxy_bytes: cycleProxyBytes,
     });
 
     // Rest between full cycles
@@ -636,32 +761,37 @@ async function runMonitor() {
       await dbLog(`Resting ${Math.round(rest / 1000)}s before next cycle...\n`, "info");
       await new Promise((resolve) => setTimeout(resolve, rest));
 
-      // Periodic Browser Restart (every 50 cycles) to prevent fingerprint accumulation
+      // Periodic Browser Restart (every 50 cycles) — new sticky IP + fresh fingerprint
       if (totalCycles > 0 && totalCycles % 50 === 0) {
-        await dbLog(`[Periodic Restart] Reached ${totalCycles} cycles. Restarting browser to reset fingerprint...`, "info");
-        try { if (proxyDetailCtx) await proxyDetailCtx.ctx.close(); } catch { /* ignore */ }
-        try { if (proxySearchCtx) await proxySearchCtx.ctx.close(); } catch { /* ignore */ }
+        await dbLog(`[Periodic Restart] Reached ${totalCycles} cycles. Rotating sticky IP...`, "info");
+        try { if (proxyBundle) await proxyBundle.ctx.close(); } catch { /* ignore */ }
         try { await context.close(); } catch { /* ignore */ }
         try { await browser.close(); } catch { /* ignore */ }
 
-        const newUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+        userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+        stickySessionId = makeSessionId();
         browser = await chromium.launch({
           headless: true,
           args: BROWSER_ARGS,
         });
         context = await browser.newContext({
           ...BASE_CONTEXT_OPTS,
-          userAgent: newUA,
+          userAgent,
         });
         page = await context.newPage();
+        attachByteCounter(page);
+        proxyBundle = await createProxyBundle(browser, userAgent, stickySessionId);
+        searchPage = proxyBundle?.searchPage || page;
+        detailPage = proxyBundle?.detailPage || page;
 
-        // Recreate proxy contexts
-        proxyDetailCtx = await createProxyDetailContext(browser, newUA);
-        proxySearchCtx = await createProxySearchContext(browser, newUA);
-        searchPage = proxySearchCtx?.pg || page;
-        detailPage = proxyDetailCtx?.pg || page;
-
-        await dbLog(`Browser restarted with new UA: ${newUA.substring(0, 50)}...`, "info");
+        await dbLog(
+          `Browser restarted — UA: ${userAgent.substring(0, 40)}... session: ${stickySessionId}`,
+          "info",
+        );
+        if (proxyBundle) {
+          const egressIp = await verifyProxyEgress(searchPage);
+          if (egressIp) await dbLog(`🌐 New egress IP: ${egressIp}`, "success");
+        }
       }
     }
   }

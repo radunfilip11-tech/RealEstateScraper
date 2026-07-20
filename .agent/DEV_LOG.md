@@ -1,5 +1,33 @@
 # Development Log
 
+## [2026-07-20] Proxy burned 2 GB in ~30 min — estimate was wrong
+
+### 42. Why 4 GB/mo estimate failed
+- **Prior estimate** (~2–4 GB/mo) assumed either (a) proxy only on detail pages, or (b) HTML/JS-only traffic.
+- **What shipped**: ALL traffic via residential proxy + **search pages loaded full images/CSS/fonts**. Njuškalo listing pages are multi‑MB with thumbnails. 2 workers × dozens of category loads/hour ≈ **~2 GB in half an hour**. Dashboard: remaining **-0.07 GB**, 402 until top-up.
+- **Fix**: Block image/stylesheet/font/media on **search and detail** proxy pages (keep document/script/xhr for Vue). Expected lean page ~0.2–0.5 MB vs ~5–15 MB full.
+- **Revised reality check** (lean, all-proxy, current scan rate, 24/7): still likely **tens of GB/month**, not 4. For cheap continuous monitoring prefer **unlimited-bandwidth ISP/static residential** (e.g. Webshare) over pay-per-GB. Pay-per-GB only works if scan rate is slowed a lot or search returns to native IP (risky if IP is burned).
+- **Files**: `scripts/monitor.ts`
+
+---
+
+## [2026-07-20] ShieldSquare blocks after proxy — root cause was IPRoyal 402 + bad sticky format
+
+### 41. Still "blocked" after proxy implementation
+- **Symptom**: Workers logged `BLOCKED by ShieldSquare` immediately on category start; 0 ads saved; 10-min backoff loops.
+- **Real root cause #1 (billing)**: IPRoyal gateway returns **HTTP 402 Payment Required**. Playwright surfaces this as `ERR_TUNNEL_CONNECTION_FAILED`, which the monitor previously mislabeled as ShieldSquare.
+- **Real root cause #2 (code)**: Sticky session IDs were invalid (`s{timestamp}_{rand}` — IPRoyal requires **exactly 8 alphanumeric** chars + `_lifetime-`). Search + detail used **separate contexts** → different IPs + no shared ShieldSquare cookies.
+- **Fix**:
+  1. Shared proxy context (search + detail pages) with one sticky session / IP
+  2. Correct sticky password: `{pass}_session-{8chars}_lifetime-30m` (country already in `PROXY_PASS`)
+  3. Startup egress IP check — refuse to scrape on native IP when proxy is configured but dead
+  4. Distinguish `blockReason` (ShieldSquare vs no-cards vs tunnel)
+  5. `scripts/test-proxy.ts` billing check (402)
+- **Action required**: Top up IPRoyal balance at dashboard, then `npx tsx scripts/test-proxy.ts`, then restart workers.
+- **Files**: `scripts/monitor.ts`, `scripts/test-proxy.ts`, `src/lib/scraper/njuskalo.ts`
+
+---
+
 ## [2026-07-20] IPRoyal Residential Proxy Integration
 
 ### 40. IPRoyal proxy for all scraping traffic

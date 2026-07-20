@@ -595,7 +595,7 @@ export async function scrapeNjuskalo(
 export async function scrapeSearchPageOnly(
   page: any,
   category: string
-): Promise<{ listings: ListingInsert[]; blocked: boolean }> {
+): Promise<{ listings: ListingInsert[]; blocked: boolean; blockReason?: string }> {
   const categoryPath = CATEGORIES[category];
   if (!categoryPath) return { listings: [], blocked: false };
 
@@ -605,23 +605,23 @@ export async function scrapeSearchPageOnly(
   try {
     await page.goto(url, {
       waitUntil: "domcontentloaded",
-      timeout: 30000,
+      timeout: 45000, // residential proxy can be slower than native IP
     });
 
     const title = await page.title();
     if (title.includes("ShieldSquare") || title.includes("Captcha")) {
-      console.error(`[Monitor] [${category}] Bot protection detected!`);
-      return { listings: [], blocked: true };
+      console.error(`[Monitor] [${category}] Bot protection detected! title="${title}"`);
+      return { listings: [], blocked: true, blockReason: "ShieldSquare/Captcha" };
     }
 
     // Wait for Vue to render listing cards
     try {
       await page.waitForSelector('article[class*="entity-body"]', {
-        timeout: 15000,
+        timeout: 20000,
       });
     } catch {
       console.warn(`[Monitor] [${category}] No listing cards found (timeout). Treating as soft block!`);
-      return { listings: [], blocked: true };
+      return { listings: [], blocked: true, blockReason: "no-cards-timeout" };
     }
 
     // Human-like scroll
@@ -634,14 +634,18 @@ export async function scrapeSearchPageOnly(
     const listings = parseListingsFromHTML(html, category);
     if (listings.length === 0) {
       console.warn(`[Monitor] [${category}] Parsed 0 listings from HTML. Treating as soft block!`);
-      return { listings: [], blocked: true };
+      return { listings: [], blocked: true, blockReason: "zero-listings-parsed" };
     }
     console.log(`[Monitor] [${category}] Found ${listings.length} listings on page 1.`);
 
     return { listings, blocked: false };
   } catch (error) {
     console.error(`[Monitor] [${category}] Error loading search page:`, error);
-    return { listings: [], blocked: true };
+    return {
+      listings: [],
+      blocked: true,
+      blockReason: `nav-error: ${(error as Error).message?.slice(0, 80) || "unknown"}`,
+    };
   }
 }
 
