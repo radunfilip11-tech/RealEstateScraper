@@ -117,9 +117,9 @@ export const PROPERTY_TYPES = [
   "Parkirno mjesto",
 ] as const;
 
-export const ADVERTISER_TYPES = ["Privatni"] as const;
+export const ADVERTISER_TYPES = ["Privatni", "Agencija"] as const;
 
-export const SOURCES = ["njuskalo"] as const;
+export const SOURCES = ["njuskalo", "oglasnik"] as const;
 
 export const TRANSACTION_TYPES = ["Prodaja", "Najam"] as const;
 

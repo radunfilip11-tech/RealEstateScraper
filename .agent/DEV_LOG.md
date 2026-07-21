@@ -1,5 +1,23 @@
 # Development Log
 
+## [2026-07-21] Save ALL ads (private + agency) to listings — full-scrape script
+
+### 45. Architecture change: all ads go to `listings`, `seen_listings` deprecated
+- **Motivation**: Since detail pages are no longer needed (search JSON has everything), there's no bandwidth reason to skip agency ads. Users want to see ALL ads and filter in the UI.
+- **Monitor change** (`scripts/monitor.ts`):
+  - Previously: private ads → `listings`, agency ads → `seen_listings` (skip tracking).
+  - Now: ALL ads → `listings` via single upsert. `seen_listings` is no longer written to. Dedup fetches only from `listings`.
+  - Log messages updated: "All ads (private + agency) saved to listings". Cycle summaries show total + private breakdown.
+- **Full scrape script** (`scripts/full-scrape.ts`):
+  - One-off script to populate the DB with ALL existing Njuškalo ads across all 17 categories.
+  - Runs locally without proxy — slow human-like delays (8-15s between pages, 30-60s between categories).
+  - Progress tracking via `scripts/full-scrape-progress.json` — stop/resume at any time.
+  - CLI flags: `--reset` (start over), `--category <name>` (one category), `--max-pages <N>`.
+  - Bot detection: pauses 15min on ShieldSquare, exits after 3 consecutive blocks.
+  - Uses same `parseListingsFromSearchJSON` parser as monitor.
+- **Dashboard impact**: None. `Dashboard.tsx` already has `advertiser_type` filter (line 223-224). `ListingCard.tsx` already shows advertiser badge. Notification filters already support `advertiser_types` array.
+- **Database impact**: `listings` table will grow faster (agency ads now included). `seen_listings` table can be dropped in the future.
+
 ## [2026-07-20] Private detection moved to search-page JSON — detail pages eliminated
 
 ### 44. We were opening a detail page for EVERY new ad just to classify private vs agency
@@ -12,8 +30,8 @@
   - `scripts/monitor.ts` no longer opens detail pages — it classifies directly from `advertiser_type` (private → `listings`, else → `seen_listings`). Removed the `fetchDetailPagePlaywright` import/loop and the `detailBlocked` path. Detail helpers stay exported (capability retained, just uncalled).
 - **Impact (expected)**: Large drop in per-cycle page loads (only 1 search page per category vs 1 + N detail pages), so much lower proxy GB, shorter cycles, and far less ShieldSquare exposure (no detail-page hammering).
 - **Docs**: New reference [`.agent/NJUSKALO_SEARCH_JSON.md`](./NJUSKALO_SEARCH_JSON.md) captures the full blob structure + field→DB mapping; `AGENTS.md` "Advanced Scraping" section updated.
-- **Lesson (promotable)**: On JS-rendered classifieds, always inspect the server-rendered state blob (inline `<script>` / `__NUXT__` / `__APOLLO_STATE__` / `application/json`) before assuming a field is "detail-page only". The visible card HTML is frequently a lossy subset of the data already shipped to the page.
-- **Files**: `src/lib/scraper/njuskalo.ts`, `scripts/monitor.ts`, `.agent/NJUSKALO_SEARCH_JSON.md`, `.agent/AGENTS.md`.
+- **Lesson (promoted to GLOBAL_LEARNING.md 2026-07-20)**: On JS-rendered classifieds, always inspect the server-rendered state blob (inline `<script>` / `__NUXT__` / `__APOLLO_STATE__` / `application/ld+json` / XHR payloads) before assuming a field is "detail-page only". The visible card HTML is frequently a lossy subset of the data already shipped to the page. Private vs agency on Njuškalo did **not** require opening detail pages once `isOwnerResidentialSeller` was found in search JSON.
+- **Files**: `src/lib/scraper/njuskalo.ts`, `scripts/monitor.ts`, `.agent/NJUSKALO_SEARCH_JSON.md`, `.agent/AGENTS.md`, `~/.gemini/GLOBAL_LEARNING.md`.
 
 ---
 

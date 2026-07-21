@@ -21,6 +21,7 @@ import {
 export default function Dashboard() {
   // Data state
   const [listings, setListings] = useState<Listing[]>([]);
+  const [visibleCount, setVisibleCount] = useState(50);
   const [loading, setLoading] = useState(true);
   const [scraping, setScraping] = useState(false);
   const [scrapeResult, setScrapeResult] = useState<string | null>(null);
@@ -191,8 +192,10 @@ export default function Dashboard() {
 
       // Apply search filter
       if (search) {
+        // Escape quotes to prevent syntax errors in PostgREST when search contains commas
+        const safeSearch = search.replace(/"/g, '""');
         query = query.or(
-          `title.ilike.%${search}%,external_id.ilike.%${search}%,location.ilike.%${search}%`
+          `title.ilike."%${safeSearch}%",external_id.ilike."%${safeSearch}%",location.ilike."%${safeSearch}%"`
         );
       }
 
@@ -203,16 +206,21 @@ export default function Dashboard() {
       if (selectedPropertyTypes.length > 0) {
         query = query.in("property_type", selectedPropertyTypes);
       }
+      
       // Apply location filters using OR logic
+      // We must quote the values manually because .or() takes a raw string and commas in values would break it
       const locationConditions = [];
       if (selectedCounties.length > 0) {
-        locationConditions.push(`location_county.in.(${selectedCounties.join(',')})`);
+        const quoted = selectedCounties.map(c => `"${c.replace(/"/g, '""')}"`);
+        locationConditions.push(`location_county.in.(${quoted.join(',')})`);
       }
       if (selectedCities.length > 0) {
-        locationConditions.push(`location_city.in.(${selectedCities.join(',')})`);
+        const quoted = selectedCities.map(c => `"${c.replace(/"/g, '""')}"`);
+        locationConditions.push(`location_city.in.(${quoted.join(',')})`);
       }
       if (selectedNeighborhoods.length > 0) {
-        locationConditions.push(`location_neighborhood.in.(${selectedNeighborhoods.join(',')})`);
+        const quoted = selectedNeighborhoods.map(c => `"${c.replace(/"/g, '""')}"`);
+        locationConditions.push(`location_neighborhood.in.(${quoted.join(',')})`);
       }
       if (locationConditions.length > 0) {
         query = query.or(locationConditions.join(','));
@@ -257,9 +265,10 @@ export default function Dashboard() {
       if (latestFetchId.current !== fetchId) return;
 
       if (error) {
-        console.error("Error fetching listings:", error);
+        console.error("Error fetching listings:", JSON.stringify(error, null, 2));
       } else {
         setListings(data || []);
+        setVisibleCount(50);
       }
     } catch (err) {
       if (latestFetchId.current !== fetchId) return;
@@ -736,11 +745,22 @@ export default function Dashboard() {
         ) : (
           <div className="space-y-3">
             <p className="text-xs text-gray-400 font-medium mb-2">
-              Prikazano {listings.length} oglasa
+              Prikazano {Math.min(visibleCount, listings.length)} od ukupno {listings.length} oglasa
             </p>
-            {listings.map((listing) => (
+            {listings.slice(0, visibleCount).map((listing) => (
               <ListingCard key={listing.id} listing={listing} onHide={() => handleHideListing(listing.id)} />
             ))}
+            
+            {visibleCount < listings.length && (
+              <div className="flex justify-center pt-4 pb-8">
+                <button
+                  onClick={() => setVisibleCount((prev) => prev + 50)}
+                  className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm transition-all"
+                >
+                  Učitaj više (još 50)
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

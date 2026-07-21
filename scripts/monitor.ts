@@ -2,20 +2,18 @@
  * Continuous Njuškalo Real Estate Monitor
  * 
  * Runs as a long-lived background process. Cycles through assigned real estate
- * categories, detecting new ads and checking if they are private
- * ("Korisnik nije trgovac") via fast HTTP fetch of detail pages.
+ * categories, detecting new ads and saving ALL ads (private + agency) to the
+ * listings table. Users filter by advertiser_type in the UI.
  * 
  * Usage: npm run monitor -- --worker-id 1
  * 
  * Architecture:
  *   1. A single Playwright browser stays alive across all cycles.
  *   2. For each category, we load page 1 (Playwright, needed for JS rendering).
- *   3. We compare the external_ids against both the listings table (private ads)
- *      and seen_listings table (agency ads we've already checked) to find truly new ads.
- *   4. For each new ad, we use raw HTTP fetch (with stolen Playwright cookies)
- *      to instantly load the detail page and check for "Korisnik nije trgovac".
- *   5. Private ads are saved to the listings table. Agency ads are tracked in
- *      seen_listings to prevent redundant detail-page fetches in future cycles.
+ *   3. We compare the external_ids against the listings table to find truly new ads.
+ *   4. Classification (private/agency) is done from the search-page JSON
+ *      (isOwnerResidentialSeller) — no detail pages needed.
+ *   5. ALL ads are saved to the listings table.
  *   6. After all categories, we rest and repeat.
  * 
  * Weighted Load Balancing (2 workers):
@@ -48,18 +46,29 @@ dotenv.config({ path: path.resolve(__dirname, "../.env.local") });
 // ---------------------------------------------------------------------------
 // Parse CLI arguments for worker ID
 // ---------------------------------------------------------------------------
-function parseWorkerId(): number {
+function parseArgs(): { workerId: number; site: "njuskalo" | "oglasnik" } {
   const args = process.argv.slice(2);
-  const idx = args.indexOf("--worker-id");
-  if (idx !== -1 && args[idx + 1]) {
-    const id = parseInt(args[idx + 1], 10);
-    if (!isNaN(id) && id > 0) return id;
+  let workerId = 1;
+  let site: "njuskalo" | "oglasnik" = "njuskalo";
+  
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--worker-id" && args[i + 1]) {
+      const id = parseInt(args[i + 1], 10);
+      if (!isNaN(id) && id > 0) workerId = id;
+      i++;
+    } else if (args[i] === "--site" && args[i + 1]) {
+      const s = args[i + 1].toLowerCase();
+      if (s === "njuskalo" || s === "oglasnik") {
+        site = s;
+      }
+      i++;
+    }
   }
-  return 1; // Default to worker 1
+  return { workerId, site };
 }
 
-const WORKER_ID = parseWorkerId();
-const WORKER_TAG = `[W${WORKER_ID}]`;
+const { workerId: WORKER_ID, site: SITE } = parseArgs();
+const WORKER_TAG = `[W${WORKER_ID}${SITE === "oglasnik" ? "-O" : ""}]`;
 
 // Define PID file path (per-worker)
 const PID_FILE = path.resolve(__dirname, `../monitor-${WORKER_ID}.pid`);
@@ -225,7 +234,7 @@ async function runMonitor() {
   // Get categories for this worker (fallback to all if not defined)
   const categoryKeys = WORKER_CATEGORIES[WORKER_ID] || Object.keys(CATEGORIES);
   await dbLog(`Monitoring ${categoryKeys.length} categories (Worker ${WORKER_ID}).`, "info");
-  await dbLog(`Mode: Private ads only (agency ads tracked in seen_listings)`, "info");
+  await dbLog(`Mode: All ads (private + agency) saved to listings`, "info");
   await dbLog(`Category delay: ${CATEGORY_DELAY_MS.min / 1000}-${CATEGORY_DELAY_MS.max / 1000}s`, "info");
   await dbLog(`Cycle rest: ${CYCLE_REST_MS.min / 1000}-${CYCLE_REST_MS.max / 1000}s`, "info");
   await dbLog(`Category order: ${categoryKeys.join(" → ")}`, "info");
@@ -413,7 +422,7 @@ async function runMonitor() {
     await dbLog(`Cycle #${totalCycles} starting — ${new Date().toLocaleString("hr-HR")} (Uptime: ${formatUptime()})`, "info");
     await dbLog(`${"═".repeat(60)}`, "info");
 
-    // Pre-fetch all known external_ids from both listings and seen_listings
+    // Pre-fetch all known external_ids from listings table for dedup
     // Supabase default limit is 1000 rows — we need ALL rows for dedup
     const fetchAllExternalIds = async (table: string): Promise<string[]> => {
       const ids: string[] = [];
@@ -434,20 +443,16 @@ async function runMonitor() {
     };
 
     let listingIds: string[] = [];
-    let seenIds: string[] = [];
     try {
-      [listingIds, seenIds] = await Promise.all([
-        fetchAllExternalIds("listings"),
-        fetchAllExternalIds("seen_listings"),
-      ]);
+      listingIds = await fetchAllExternalIds("listings");
     } catch (err: any) {
       await dbLog(`Failed to fetch known IDs: ${err.message}`, "error");
       await randomDelay(30000, 60000);
       continue;
     }
 
-    const knownIds = new Set<string>([...listingIds, ...seenIds]);
-    await dbLog(`Database has ${knownIds.size} known listings (${listingIds.length} full, ${seenIds.length} seen).`, "info");
+    const knownIds = new Set<string>(listingIds);
+    await dbLog(`Database has ${knownIds.size} known listings.`, "info");
 
     // Cycle through all categories (in shuffled order for this worker)
     for (let i = 0; i < categoryKeys.length; i++) {
@@ -557,30 +562,16 @@ async function runMonitor() {
 
           await dbLog(`[${category}] 🆕 ${uniqueNewListings.length} NEW ads detected on page 1!`, "info");
 
-          const privateListingsToSave = [];
-          const seenListingsToSave = [];
-
-          // Classify directly from the search-page JSON. advertiser_type is
-          // already set by parseListingsFromSearchJSON (isOwnerResidentialSeller),
-          // along with price/location/size/published/promoted — so there is no
-          // need to open detail pages. See .agent/NJUSKALO_SEARCH_JSON.md.
+          // Log each new ad with its type
           for (const listing of uniqueNewListings) {
             const isPrivate = listing.advertiser_type === "Privatni";
-
             if (isPrivate) {
               cyclePrivateAds++;
-              privateListingsToSave.push(listing);
               await dbLog(
                 `[${category}] 🔑 PRIVATE | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
                 "success"
               );
             } else {
-              // Track agency/non-private ads in seen_listings for skip tracking
-              seenListingsToSave.push({
-                external_id: listing.external_id,
-                advertiser_type: listing.advertiser_type || "Agencija",
-                worker_id: WORKER_ID,
-              });
               await dbLog(
                 `[${category}]    Agency  | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
                 "info"
@@ -591,35 +582,20 @@ async function runMonitor() {
             knownIds.add(listing.external_id);
           }
 
-          // Save ONLY private listings to the main listings table
-          if (privateListingsToSave.length > 0) {
+          // Save ALL listings (private + agency) to the listings table
+          if (uniqueNewListings.length > 0) {
             const { error: insertError } = await (supabase as any)
               .from("listings")
-              .upsert(privateListingsToSave, { onConflict: "external_id", ignoreDuplicates: true });
+              .upsert(uniqueNewListings, { onConflict: "external_id", ignoreDuplicates: true });
 
             if (insertError) {
               await dbLog(`[${category}] Insert error: ${insertError.message}`, "error");
             } else {
-              await dbLog(`[${category}] ✅ Saved ${privateListingsToSave.length} PRIVATE listings to database.`, "success");
-              cycleNewAds += privateListingsToSave.length;
+              const privateCount = uniqueNewListings.filter((l: any) => l.advertiser_type === "Privatni").length;
+              const agencyCount = uniqueNewListings.length - privateCount;
+              await dbLog(`[${category}] ✅ Saved ${uniqueNewListings.length} listings (${privateCount} private, ${agencyCount} agency).`, "success");
+              cycleNewAds += uniqueNewListings.length;
             }
-          }
-
-          // Save agency ads to seen_listings for skip tracking
-          if (seenListingsToSave.length > 0) {
-            const { error: seenError } = await (supabase as any)
-              .from("seen_listings")
-              .upsert(seenListingsToSave, { onConflict: "external_id", ignoreDuplicates: true });
-
-            if (seenError) {
-              await dbLog(`[${category}] Error saving seen listings: ${seenError.message}`, "error");
-            } else {
-              await dbLog(`[${category}] 📝 Tracked ${seenListingsToSave.length} agency ads in seen_listings.`, "info");
-            }
-          }
-
-          if (privateListingsToSave.length === 0 && seenListingsToSave.length === 0) {
-            await dbLog(`[${category}] No ads to save.`, "warning");
           }
         }
       }
@@ -647,8 +623,8 @@ async function runMonitor() {
 
     await dbLog(`\n${"─".repeat(60)}`, "info");
     await dbLog(`Cycle #${totalCycles} complete in ${cycleDuration}s`, "info");
-    await dbLog(`  This cycle: ${cycleNewAds} private ads saved`, "success");
-    await dbLog(`  All time:   ${totalNewAds} private ads saved (${totalCycles} cycles)`, "info");
+    await dbLog(`  This cycle: ${cycleNewAds} ads saved (${cyclePrivateAds} private)`, "success");
+    await dbLog(`  All time:   ${totalNewAds} ads saved (${totalCycles} cycles)`, "info");
     await dbLog(`  Proxy traffic: ${cycleMB.toFixed(1)} MB (approx, via Content-Length)`, "info");
     await dbLog(`${"─".repeat(60)}`, "info");
 

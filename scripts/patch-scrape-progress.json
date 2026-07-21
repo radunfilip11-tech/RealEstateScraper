@@ -1,0 +1,1686 @@
+{
+  "tasks": [
+    {
+      "category": "stanovi",
+      "county": "zagreb",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "zagrebacka",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "splitsko-dalmatinska",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "primorsko-goranska",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "istarska",
+      "status": "skipped"
+    },
+    {
+      "category": "stanovi",
+      "county": "zadarska",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "sibensko-kninska",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "dubrovacko-neretvanska",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "osjecko-baranjska",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "varazdinska",
+      "status": "skipped"
+    },
+    {
+      "category": "stanovi",
+      "county": "bjelovarsko-bilogorska",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "brodsko-posavska",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "karlovacka",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "koprivnicko-krizevacka",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "krapinsko-zagorska",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "licko-senjska",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "medimurska",
+      "status": "skipped"
+    },
+    {
+      "category": "stanovi",
+      "county": "pozesko-slavonska",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "sisacko-moslavacka",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "viroviticko-podravska",
+      "status": "done"
+    },
+    {
+      "category": "stanovi",
+      "county": "vukovarsko-srijemska",
+      "status": "done"
+    },
+    {
+      "category": "kuce",
+      "county": "zagreb",
+      "status": "skipped"
+    },
+    {
+      "category": "kuce",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "kuce",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "zemljista",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "poslovni_prostori",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "vikendice",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "garaze",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "novogradnja",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzne_kuce",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "luksuzni_stanovi",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_stanova",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_kuca",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_poslovnih_prostora",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_garaza",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_zemljista",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_kuca",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "zagreb",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "zagrebacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "splitsko-dalmatinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "primorsko-goranska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "istarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "zadarska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "sibensko-kninska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "dubrovacko-neretvanska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "osjecko-baranjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "varazdinska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "bjelovarsko-bilogorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "brodsko-posavska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "karlovacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "koprivnicko-krizevacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "krapinsko-zagorska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "licko-senjska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "medimurska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "pozesko-slavonska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "sisacko-moslavacka",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "viroviticko-podravska",
+      "status": "pending"
+    },
+    {
+      "category": "najam_luksuznih_stanova",
+      "county": "vukovarsko-srijemska",
+      "status": "pending"
+    }
+  ],
+  "totalInserted": 1218,
+  "lastUpdated": "2026-07-21T10:38:18.255Z"
+}
