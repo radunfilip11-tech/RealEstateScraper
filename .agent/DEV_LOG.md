@@ -1,5 +1,26 @@
 # Development Log
 
+## [2026-07-21] Oglasnik.hr Integration & Next.js RSC / DOM Parsing
+
+### 46. Oglasnik.hr integration, RSC / DOM rendering discovery & dashboard filter fix
+- **Goal**: Integrate Oglasnik.hr as a second real estate data source into the same `listings` table and dashboard UI with source filtering.
+- **RSC Payload & DOM Discovery**:
+  - Initial investigation showed Oglasnik.hr uses Next.js App Router with React Server Components (`RSC`).
+  - Search pages do not render listing cards in static HTML strings; data is fetched via `_rsc` HTTP requests (`Accept: text/x-component`, `RSC: 1`).
+  - While raw RSC payloads contain `ads` arrays (promoted shop ads), regular listings are rendered directly into React VDOM nodes.
+  - Parsing static HTML with regex/JSON extraction yields 0 listings because hydration happens on the client side.
+- **Scraper Implementation**:
+  - Implemented `parseOglasnikPage(page, categoryUrl)` in `src/lib/scraper/oglasnik.ts` using Playwright DOM evaluation (`page.$$eval('a[href*="-oglas-"]')`).
+  - Extracted `title`, `price` (parsed to numeric), `size_m2` (from raw text regex matching `m²`), location, and mapped Oglasnik top-level locations to Njuškalo counties (`OGLASNIK_TO_NJUSKALO_COUNTY`).
+  - Added `waitForSelector('a[href*="-oglas-"]')` in `scripts/full-scrape.ts` before DOM extraction so Playwright waits for React hydration/RSC rendering.
+  - Prefixed Oglasnik IDs with `oglasnik-` (`oglasnik-7084444`) to match Njuškalo's `njuskalo-` prefix pattern and avoid ID collisions in `listings.external_id`.
+  - Tested 1-page scrape on `stanovi` category: successfully inserted 100 Oglasnik listings with 100% data quality (county, price_numeric, and size_m2 present on all rows).
+- **Dashboard & Type Updates**:
+  - Updated `SOURCES` constant in `src/lib/supabase/types.ts` from `["njuskalo"]` to `["njuskalo", "oglasnik"]`.
+  - Added `"Agencija"` to `ADVERTISER_TYPES` constant (Oglasnik search page defaults to Agencija).
+  - Enables the "Oglasnik" source dropdown filter on the live dashboard.
+- **Files modified**: `src/lib/scraper/oglasnik.ts`, `scripts/full-scrape.ts`, `src/lib/supabase/types.ts`, `src/components/Dashboard.tsx`, `.agent/DEV_LOG.md`.
+
 ## [2026-07-21] Save ALL ads (private + agency) to listings — full-scrape script
 
 ### 45. Architecture change: all ads go to `listings`, `seen_listings` deprecated

@@ -5,7 +5,7 @@ async function test() {
   
   await page.goto("https://www.oglasnik.hr/stanovi-prodaja?page=1", { waitUntil: "networkidle" });
   
-  const listings = await page.$$eval('a[href*="-oglas-"]', (els) => {
+  const listings = await page.$$eval('a[href*="-oglas-"]', (els: HTMLAnchorElement[]) => {
     return els.map(el => {
       // Find title, price, location inside the card
       const titleEl = el.querySelector('h2, h3, h4, .text-lg, .font-semibold');

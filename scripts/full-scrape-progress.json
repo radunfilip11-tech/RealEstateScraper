@@ -1,12 +1,26 @@
 {
-  "currentCategoryIndex": 2,
-  "currentCountyIndex": 1,
-  "currentPage": 73,
+  "currentCategoryIndex": 16,
+  "currentCountyIndex": 0,
+  "currentPage": 1,
   "completedCategories": [
     "stanovi",
-    "kuce"
+    "kuce",
+    "zemljista",
+    "poslovni_prostori",
+    "vikendice",
+    "garaze",
+    "novogradnja",
+    "luksuzne_kuce",
+    "luksuzni_stanovi",
+    "najam_stanova",
+    "najam_kuca",
+    "najam_poslovnih_prostora",
+    "najam_garaza",
+    "najam_zemljista",
+    "najam_luksuznih_kuca",
+    "najam_luksuznih_stanova"
   ],
-  "totalInserted": 42480,
-  "totalSkipped": 27807,
-  "lastUpdated": "2026-07-21T20:47:40.103Z"
+  "totalInserted": 75501,
+  "totalSkipped": 44003,
+  "lastUpdated": "2026-07-22T04:53:13.698Z"
 }

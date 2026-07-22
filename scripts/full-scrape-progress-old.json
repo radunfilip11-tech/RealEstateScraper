@@ -1,12 +1,9 @@
 {
-  "currentCategoryIndex": 2,
-  "currentCountyIndex": 1,
-  "currentPage": 66,
-  "completedCategories": [
-    "stanovi",
-    "kuce"
-  ],
-  "totalInserted": 42603,
-  "totalSkipped": 27528,
-  "lastUpdated": "2026-07-21T20:47:36.928Z"
+  "currentCategoryIndex": 0,
+  "currentCountyIndex": 2,
+  "currentPage": 13,
+  "completedCategories": [],
+  "totalInserted": 33,
+  "totalSkipped": 9493,
+  "lastUpdated": "2026-07-22T06:13:43.817Z"
 }

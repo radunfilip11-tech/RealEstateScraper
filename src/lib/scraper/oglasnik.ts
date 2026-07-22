@@ -183,6 +183,8 @@ export async function parseOglasnikPage(
       transaction_type: categoryUrl.includes("najam") ? "Najam" : "Prodaja",
       is_promoted: item.rawText?.includes("Top Oglas") || false,
       status: "Novi",
+      property_type: null,
+      image_url: null,
       source: "oglasnik",
       description: null,
       hidden: false,

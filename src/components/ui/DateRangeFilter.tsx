@@ -118,7 +118,7 @@ export default function DateRangeFilter({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full mt-2 left-0 w-[380px] bg-white border border-gray-200 rounded-xl shadow-2xl z-50 p-5 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute top-full mt-2 right-0 w-[90vw] sm:w-[380px] max-w-[380px] bg-white border border-gray-200 rounded-xl shadow-2xl z-50 p-5 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-sm font-semibold text-gray-800">Filtriraj po datumu</h3>
             {hasValue && (

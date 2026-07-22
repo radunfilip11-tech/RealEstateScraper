@@ -91,6 +91,24 @@ export default function NotificationFilterForm({
     fetchLocations();
   }, []);
 
+  const [recentChatIds, setRecentChatIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    async function fetchChatIds() {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supabase = getSupabaseBrowserClient() as any;
+      const { data } = await supabase
+        .from("notification_filters")
+        .select("telegram_chat_id");
+      if (data) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const unique = Array.from(new Set(data.map((d: any) => d.telegram_chat_id))).filter(Boolean) as string[];
+        setRecentChatIds(unique);
+      }
+    }
+    fetchChatIds();
+  }, []);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -162,7 +180,7 @@ export default function NotificationFilterForm({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 pb-32">
           {error && (
             <div className="bg-red-50 text-red-700 border border-red-200 p-3 rounded-lg text-sm">
               {error}
@@ -192,11 +210,17 @@ export default function NotificationFilterForm({
               <input
                 required
                 type="text"
+                list="recent-chat-ids"
                 value={chatId}
                 onChange={(e) => setChatId(e.target.value)}
                 placeholder="-1001234567890"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
               />
+              <datalist id="recent-chat-ids">
+                {recentChatIds.map((id) => (
+                  <option key={id} value={id} />
+                ))}
+              </datalist>
               <p className="text-xs text-gray-500 mt-1">
                 ID grupe ili chata (doznajte ga od @RawDataBot u Telegramu)
               </p>
