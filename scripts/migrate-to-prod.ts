@@ -107,8 +107,8 @@ async function main() {
           .upsert(batch as any[], {
             onConflict: 'external_id',
             ignoreDuplicates: true,
-          })
-          .select('id', { count: 'exact', head: true });
+            count: 'exact',
+          });
 
         if (writeErr) {
           console.error('❌ Prod write error:', writeErr.message);
