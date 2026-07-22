@@ -323,14 +323,24 @@ export function parseListingsFromSearchJSON(
           ? abstractValues.join(", ").substring(0, 500)
           : null;
 
-      // --- Size (m²) from an abstract like "Stambena površina: 76.36 m2" ---
+      // --- Size (m²) from an abstract like "Stambena površina: 76.36 m2" or "Zemljišna površina: 1.250 m2" ---
       let sizeM2: number | null = null;
       for (const v of abstractValues) {
-        const sm = v.match(/povr[šs]ina[^0-9]*([\d.,]+)\s*m/i);
+        const sm = v.match(/(?:povr[šs]ina|zemlji[šs]t[ea])[^0-9]*([\d.\s]+(?:,\d+)?)\s*m/i);
         if (sm) {
-          const parsed = parseFloat(sm[1].replace(/\s/g, "").replace(",", "."));
+          const parsed = parseFloat(sm[1].replace(/\s/g, "").replace(/\./g, "").replace(",", "."));
           if (!isNaN(parsed)) sizeM2 = parsed;
           break;
+        }
+      }
+      // Fallback: if sizeM2 is still null, try extracting from title (e.g. "686 m²", "1.250 m2")
+      if (sizeM2 === null && title) {
+        const tm = title.match(/([\d.\s]+)\s*(?:m²|m2)\b/i);
+        if (tm) {
+          const parsed = parseFloat(tm[1].replace(/\s/g, "").replace(/\./g, "").replace(",", "."));
+          if (!isNaN(parsed) && parsed >= 5 && parsed <= 5000000) {
+            sizeM2 = parsed;
+          }
         }
       }
 
