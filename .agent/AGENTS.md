@@ -27,9 +27,12 @@ Defined in `src/lib/scraper/njuskalo.ts` as `CATEGORIES` + `WORKER_CATEGORIES`.
 ## Multi-Worker Monitor Architecture (2 workers)
 - **Spawn**: `src/app/api/monitor/control/route.ts` starts 2 detached processes via `npm run monitor -- --worker-id N`
 - **Windows**: Workers run hidden (`windowsHide: true`); logs go to `logs/worker-N.log` (QuickEdit console freeze prevention)
-- **Category assignment**: `WORKER_CATEGORIES` in `njuskalo.ts` — each worker scans a different subset
-- **Dedup**: Both workers share the same `listings` table; paginated fetch at cycle start (Supabase 1000-row limit)
-- **Bot protection**: Adaptive min cycle duration — night W1 8–10 min / W2 20–25 min; day W1 100–250s / W2 200–500s; 10-min backoff on ShieldSquare block
+- **Category assignment**: `WORKER_CATEGORIES` in `njuskalo.ts` — Worker 1 scans sprint categories (stanovi, kuće, najam...), Worker 2 covers all remaining categories.
+- **Periodical Scheduling**: W1 scans every `w1_interval_min` (30 min default), W2 every `w2_interval_min` (300 min / 5 hours default).
+- **Night Window**: Automatic sleep from 2 AM to 6 AM (Europe/Zagreb timezone).
+- **Incremental Catchup Pagination**: `scrapeSearchPagesUntilKnown` paginates search results (`page=1`, `page=2`...) until an entire page consists of known IDs (catchup boundary) or hits `max_pages_per_category` (safety cap).
+- **Integrated Notifications**: Workers invoke `runNotificationPoll()` at end of cycle, sending Telegram alerts immediately. Standalone `notify-poll` PM2 process removed.
+- **Remote Config (UI → Supabase)**: `scraper_config` table in Supabase edited via `/api/scraper-config` and `ScraperConfigCard` component. Workers fetch config at start of each cycle.
 - **Stats**: `/api/monitor/stats` — latency, category frequency, per-worker metrics, `adsPerHour` histogram data
 
 ## Project Structure

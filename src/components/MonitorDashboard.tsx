@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Listing } from "@/lib/supabase/types";
 import ListingCard from "@/components/ui/ListingCard";
+import ScraperConfigCard from "@/components/ScraperConfigCard";
 
 interface LogEntry {
   id: string;
@@ -238,6 +239,11 @@ export default function MonitorDashboard() {
           
 
         </div>
+      </div>
+
+      {/* Remote Configuration Panel */}
+      <div className="mb-4">
+        <ScraperConfigCard />
       </div>
 
       {/* Stats Panel */}

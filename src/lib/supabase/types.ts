@@ -53,6 +53,24 @@ export interface SeenListing {
   worker_id: number | null;
 }
 
+export interface ScraperConfig {
+  w1_interval_min: number;
+  w2_interval_min: number;
+  night_start_hour: number;
+  night_end_hour: number;
+  max_pages_per_category: number;
+  workers_enabled: boolean;
+}
+
+export const DEFAULT_SCRAPER_CONFIG: ScraperConfig = {
+  w1_interval_min: 30,
+  w2_interval_min: 300,
+  night_start_hour: 2,
+  night_end_hour: 6,
+  max_pages_per_category: 10,
+  workers_enabled: true,
+};
+
 export interface NotificationFilter {
   id: string;
   name: string;

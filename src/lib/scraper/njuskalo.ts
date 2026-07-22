@@ -822,6 +822,127 @@ export async function scrapeSearchPageOnly(
 }
 
 /**
+ * Multi-page search scrape for continuous monitor.
+ * Scrapes pages sequentially (1, 2, ...) until an entire page consists of known listings,
+ * or until maxPages cap is reached.
+ */
+export async function scrapeSearchPagesUntilKnown(
+  page: any,
+  category: string,
+  knownIds: Set<string>,
+  maxPages: number = 10
+): Promise<{
+  listings: ListingInsert[];
+  pagesScanned: number;
+  blocked: boolean;
+  blockReason?: string;
+}> {
+  const categoryPath = CATEGORIES[category];
+  if (!categoryPath) return { listings: [], pagesScanned: 0, blocked: false };
+
+  const allNewListings: ListingInsert[] = [];
+  let pagesScanned = 0;
+
+  for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+    const url =
+      pageNum === 1
+        ? `${NJUSKALO_BASE}${categoryPath}?sort=new`
+        : `${NJUSKALO_BASE}${categoryPath}?page=${pageNum}&sort=new`;
+    console.log(`[Monitor] [${category}] Loading search page ${pageNum}: ${url}`);
+
+    try {
+      await page.goto(url, {
+        waitUntil: "domcontentloaded",
+        timeout: 45000,
+      });
+
+      const title = await page.title();
+      if (title.includes("ShieldSquare") || title.includes("Captcha")) {
+        console.error(`[Monitor] [${category}] Bot protection detected on page ${pageNum}! title="${title}"`);
+        return {
+          listings: allNewListings,
+          pagesScanned,
+          blocked: true,
+          blockReason: "ShieldSquare/Captcha",
+        };
+      }
+
+      // Wait for Vue to render listing cards
+      try {
+        await page.waitForSelector('article[class*="entity-body"]', {
+          timeout: 20000,
+        });
+      } catch {
+        if (pageNum === 1) {
+          console.warn(`[Monitor] [${category}] No listing cards found on page 1 (timeout). Treating as soft block!`);
+          return { listings: [], pagesScanned: 0, blocked: true, blockReason: "no-cards-timeout" };
+        } else {
+          console.log(`[Monitor] [${category}] No listing cards on page ${pageNum}. Reached end of category.`);
+          break;
+        }
+      }
+
+      // Human-like scroll
+      await page.evaluate(() => {
+        window.scrollBy(0, Math.floor(Math.random() * 500) + 300);
+      });
+      await randomDelay(300, 600);
+
+      const html = await page.content();
+      let listings = parseListingsFromSearchJSON(html, category);
+      if (listings.length === 0) {
+        listings = parseListingsFromHTML(html, category);
+      }
+      if (listings.length === 0) {
+        if (pageNum === 1) {
+          console.warn(`[Monitor] [${category}] Parsed 0 listings on page 1. Soft block!`);
+          return { listings: [], pagesScanned: 0, blocked: true, blockReason: "zero-listings-parsed" };
+        } else {
+          break;
+        }
+      }
+
+      pagesScanned++;
+
+      // Filter new listings on this page
+      const newListingsOnPage = listings.filter((l) => !knownIds.has(l.external_id));
+
+      console.log(
+        `[Monitor] [${category}] Page ${pageNum}: ${listings.length} total, ${newListingsOnPage.length} new.`
+      );
+
+      allNewListings.push(...newListingsOnPage);
+
+      // STOP CONDITION: if ALL listings on this page are already known in DB, we've caught up!
+      if (newListingsOnPage.length === 0) {
+        console.log(`[Monitor] [${category}] Page ${pageNum}: all ${listings.length} listings known. Incremental catchup complete!`);
+        break;
+      }
+
+      // Delay between pages if paginating further
+      if (pageNum < maxPages) {
+        await randomDelay(2000, 4000);
+      }
+    } catch (error) {
+      console.error(`[Monitor] [${category}] Error on page ${pageNum}:`, error);
+      if (pageNum === 1) {
+        return {
+          listings: [],
+          pagesScanned: 0,
+          blocked: true,
+          blockReason: `nav-error: ${(error as Error).message?.slice(0, 80) || "unknown"}`,
+        };
+      }
+      // If error on page > 1, return what we have so far
+      break;
+    }
+  }
+
+  return { listings: allNewListings, pagesScanned, blocked: false };
+}
+
+
+/**
  * Fetch a detail page using raw HTTP fetch with stolen Playwright cookies.
  * ~10x faster than navigating Playwright to the page.
  * Returns the parsed detail data including advertiser type.

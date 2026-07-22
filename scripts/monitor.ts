@@ -29,8 +29,11 @@ import {
   WORKER_CATEGORIES,
   NJUSKALO_BASE,
   scrapeSearchPageOnly,
+  scrapeSearchPagesUntilKnown,
   randomDelay,
 } from "../src/lib/scraper/njuskalo";
+import { runNotificationPoll } from "../src/lib/notifications/poll";
+import { DEFAULT_SCRAPER_CONFIG, type ScraperConfig } from "../src/lib/supabase/types";
 
 // ---------------------------------------------------------------------------
 // Supabase client via server helper (service role key, Node 20 ws transport).
@@ -39,6 +42,7 @@ import * as dotenv from "dotenv";
 import * as path from "path";
 import * as fs from "fs";
 import { getSupabaseServerClient } from "../src/lib/supabase/server";
+
 
 // Load environment variables from .env.local
 dotenv.config({ path: path.resolve(__dirname, "../.env.local") });
@@ -186,6 +190,49 @@ async function dbLog(message: string, level: "info" | "success" | "warning" | "e
   console.log(taggedMessage);
   await (supabase as any).from("scraper_console_logs").insert({ message: taggedMessage, level });
 }
+
+/**
+ * Fetch dynamic scraper settings from Supabase `scraper_config` table.
+ * Falls back to DEFAULT_SCRAPER_CONFIG if table is missing or query fails.
+ */
+async function fetchScraperConfig(): Promise<ScraperConfig> {
+  const config: ScraperConfig = { ...DEFAULT_SCRAPER_CONFIG };
+  try {
+    const { data, error } = await (supabase as any)
+      .from("scraper_config")
+      .select("key, value");
+
+    if (!error && data) {
+      for (const row of data) {
+        if (row.key in config) {
+          try {
+            (config as any)[row.key] =
+              typeof row.value === "string" ? JSON.parse(row.value) : row.value;
+          } catch {
+            (config as any)[row.key] = row.value;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    /* fallback to defaults */
+  }
+  return config;
+}
+
+/**
+ * Sleep helper that breaks early if PID file is deleted or shuttingDown flag is set.
+ */
+async function interruptibleSleep(ms: number): Promise<void> {
+  const checkInterval = 2000;
+  let elapsed = 0;
+  while (elapsed < ms) {
+    if (!fs.existsSync(PID_FILE)) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(checkInterval, ms - elapsed)));
+    elapsed += checkInterval;
+  }
+}
+
 
 // ---------------------------------------------------------------------------
 // Bandwidth metering — approximate bytes transferred per cycle (via
@@ -411,6 +458,35 @@ async function runMonitor() {
       break;
     }
 
+    // Fetch dynamic scraper config from Supabase
+    const activeConfig = await fetchScraperConfig();
+
+    // Check if workers are remotely disabled
+    if (!activeConfig.workers_enabled) {
+      await dbLog("⚠️ Workers remotely disabled via UI config. Pausing 60s...", "warning");
+      await interruptibleSleep(60000);
+      continue;
+    }
+
+    // Check Night Window (Croatia Time)
+    const croatiaTimeStr = new Date().toLocaleString("en-US", { timeZone: "Europe/Zagreb" });
+    const croatiaHour = new Date(croatiaTimeStr).getHours();
+    const nightStart = activeConfig.night_start_hour;
+    const nightEnd = activeConfig.night_end_hour;
+    const inNightWindow =
+      nightStart < nightEnd
+        ? croatiaHour >= nightStart && croatiaHour < nightEnd
+        : croatiaHour >= nightStart || croatiaHour < nightEnd;
+
+    if (inNightWindow) {
+      await dbLog(
+        `🌙 Noćni radni režim (aktivna pauza od ${nightStart}:00 do ${nightEnd}:00 sati po HR vremenu). Spavanje 15 minuta...`,
+        "info"
+      );
+      await interruptibleSleep(15 * 60 * 1000);
+      continue;
+    }
+
     totalCycles++;
     const cycleStart = Date.now();
     let cycleNewAds = 0;
@@ -418,12 +494,17 @@ async function runMonitor() {
     let blocked = false;
     cycleProxyBytes = 0;
 
+    const workerIntervalMin =
+      WORKER_ID === 1 ? activeConfig.w1_interval_min : activeConfig.w2_interval_min;
+
     await dbLog(`\n${"═".repeat(60)}`, "info");
-    await dbLog(`Cycle #${totalCycles} starting — ${new Date().toLocaleString("hr-HR")} (Uptime: ${formatUptime()})`, "info");
+    await dbLog(
+      `Cycle #${totalCycles} starting — ${new Date().toLocaleString("hr-HR")} (Period: ${workerIntervalMin} min, Max pages: ${activeConfig.max_pages_per_category})`,
+      "info"
+    );
     await dbLog(`${"═".repeat(60)}`, "info");
 
     // Pre-fetch all known external_ids from listings table for dedup
-    // Supabase default limit is 1000 rows — we need ALL rows for dedup
     const fetchAllExternalIds = async (table: string): Promise<string[]> => {
       const ids: string[] = [];
       const PAGE_SIZE = 1000;
@@ -447,18 +528,17 @@ async function runMonitor() {
       listingIds = await fetchAllExternalIds("listings");
     } catch (err: any) {
       await dbLog(`Failed to fetch known IDs: ${err.message}`, "error");
-      await randomDelay(30000, 60000);
+      await interruptibleSleep(30000);
       continue;
     }
 
     const knownIds = new Set<string>(listingIds);
     await dbLog(`Database has ${knownIds.size} known listings.`, "info");
 
-    // Cycle through all categories (in shuffled order for this worker)
+    // Cycle through all categories
     for (let i = 0; i < categoryKeys.length; i++) {
       if (shuttingDown) break;
 
-      // Check if PID file was deleted mid-cycle
       if (!fs.existsSync(PID_FILE)) {
         await dbLog("PID file missing. Stopping mid-cycle.", "warning");
         await shutdown();
@@ -468,25 +548,25 @@ async function runMonitor() {
       const category = categoryKeys[i];
       await dbLog(`\n── Category ${i + 1}/${categoryKeys.length}: ${category} ──`, "info");
 
-      // Scrape search page (uses proxy when available, VPS IP otherwise)
-      const result = await scrapeSearchPageOnly(searchPage, category);
+      // Incremental scan: scrape pages 1..N until an entire page of known ads is reached
+      const result = await scrapeSearchPagesUntilKnown(
+        searchPage,
+        category,
+        knownIds,
+        activeConfig.max_pages_per_category
+      );
 
       let softMiss = false;
 
       if (result.blocked) {
         const reason = result.blockReason || "unknown";
         const isProxyDead = /ERR_TUNNEL|ERR_PROXY|402|tunnel/i.test(reason);
-        // "No cards rendered" / "0 listings parsed" are often just a slow proxy
-        // hop or a genuinely empty category — NOT proof of ShieldSquare. Treating
-        // them as a real block used to trigger a full browser restart + new
-        // sticky IP for every one of these, re-downloading everything for
-        // nothing. Only rotate/backoff on an actual ShieldSquare/Captcha hit.
         const isSoftMiss = reason === "no-cards-timeout" || reason === "zero-listings-parsed";
 
         if (isProxyDead) {
           await dbLog(
             `🛑 Proxy tunnel dead mid-run (${reason}). Stopping worker — top up IPRoyal, then restart.`,
-            "error",
+            "error"
           );
           await shutdown();
           break;
@@ -494,33 +574,25 @@ async function runMonitor() {
 
         if (isSoftMiss) {
           softMiss = true;
-          await dbLog(`[${category}] ⚠️  Soft miss (${reason}) — skipping category, no restart.`, "warning");
+          await dbLog(`[${category}] ⚠️ Soft miss (${reason}) — skipping category.`, "warning");
         } else {
           await dbLog(
-            `⚠️  BLOCKED (${reason})! Rotating sticky IP + backing off ${BLOCKED_BACKOFF_MS / 60000} min...`,
-            "error",
+            `⚠️ BLOCKED (${reason})! Rotating sticky IP + backing off ${BLOCKED_BACKOFF_MS / 60000} min...`,
+            "error"
           );
           blocked = true;
 
-          // Close immediately so we don't keep hammering a burned IP during backoff
           try { if (proxyBundle) await proxyBundle.ctx.close(); } catch { /* ignore */ }
           try { await context.close(); } catch { /* ignore */ }
           try { await browser.close(); } catch { /* ignore */ }
           proxyBundle = null;
 
-          await randomDelay(BLOCKED_BACKOFF_MS, BLOCKED_BACKOFF_MS + 60000);
+          await interruptibleSleep(BLOCKED_BACKOFF_MS);
 
-          // New UA + new sticky session (= new residential IP)
           userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
           stickySessionId = makeSessionId();
-          browser = await chromium.launch({
-            headless: true,
-            args: BROWSER_ARGS,
-          });
-          context = await browser.newContext({
-            ...BASE_CONTEXT_OPTS,
-            userAgent,
-          });
+          browser = await chromium.launch({ headless: true, args: BROWSER_ARGS });
+          context = await browser.newContext({ ...BASE_CONTEXT_OPTS, userAgent });
           page = await context.newPage();
           attachByteCounter(page);
           proxyBundle = await createProxyBundle(browser, userAgent, stickySessionId);
@@ -529,88 +601,75 @@ async function runMonitor() {
 
           await dbLog(
             `Browser restarted — UA: ${userAgent.substring(0, 40)}... session: ${stickySessionId}`,
-            "info",
+            "info"
           );
           if (proxyBundle) {
             const egressIp = await verifyProxyEgress(searchPage);
             if (egressIp) await dbLog(`🌐 New egress IP: ${egressIp}`, "success");
           }
-          break; // End this cycle early — resumes on the next loop iteration
+          break;
         }
       }
 
       if (softMiss) {
-        // Already logged above — just fall through to category_scans + delay below.
+        // Fall through
       } else if (result.listings.length === 0) {
-        await dbLog(`[${category}] No listings found, skipping.`, "info");
+        await dbLog(`[${category}] No new listings found (${result.pagesScanned} page(s) checked).`, "info");
       } else {
-        // Find truly new ads
-        const newListings = result.listings.filter(
-          (l) => !knownIds.has(l.external_id)
+        const uniqueNewListings = result.listings.filter((l, index, self) =>
+          index === self.findIndex((t) => t.external_id === l.external_id)
         );
 
-        if (newListings.length === 0) {
-          await dbLog(`[${category}] All ${result.listings.length} listings already known.`, "info");
-        } else {
-          // Dedupe newListings by external_id (in case same ad appears multiple times on page)
-          const seenInBatch = new Set<string>();
-          const uniqueNewListings = newListings.filter((l) => {
-            if (seenInBatch.has(l.external_id)) return false;
-            seenInBatch.add(l.external_id);
-            return true;
-          });
+        await dbLog(
+          `[${category}] 🆕 ${uniqueNewListings.length} NEW ads detected across ${result.pagesScanned} page(s)!`,
+          "info"
+        );
 
-          await dbLog(`[${category}] 🆕 ${uniqueNewListings.length} NEW ads detected on page 1!`, "info");
-
-          // Log each new ad with its type
-          for (const listing of uniqueNewListings) {
-            const isPrivate = listing.advertiser_type === "Privatni";
-            if (isPrivate) {
-              cyclePrivateAds++;
-              await dbLog(
-                `[${category}] 🔑 PRIVATE | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
-                "success"
-              );
-            } else {
-              await dbLog(
-                `[${category}]    Agency  | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
-                "info"
-              );
-            }
-
-            // Mark this ID as known so we don't re-process it in subsequent categories
-            knownIds.add(listing.external_id);
+        for (const listing of uniqueNewListings) {
+          const isPrivate = listing.advertiser_type === "Privatni";
+          if (isPrivate) {
+            cyclePrivateAds++;
+            await dbLog(
+              `[${category}] 🔑 PRIVATE | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
+              "success"
+            );
+          } else {
+            await dbLog(
+              `[${category}]    Agency  | ${listing.title?.substring(0, 50)} | ${listing.price || "N/A"}`,
+              "info"
+            );
           }
+          knownIds.add(listing.external_id);
+        }
 
-          // Save ALL listings (private + agency) to the listings table
-          if (uniqueNewListings.length > 0) {
-            const { error: insertError } = await (supabase as any)
-              .from("listings")
-              .upsert(uniqueNewListings, { onConflict: "external_id", ignoreDuplicates: true });
+        if (uniqueNewListings.length > 0) {
+          const { error: insertError } = await (supabase as any)
+            .from("listings")
+            .upsert(uniqueNewListings, { onConflict: "external_id", ignoreDuplicates: true });
 
-            if (insertError) {
-              await dbLog(`[${category}] Insert error: ${insertError.message}`, "error");
-            } else {
-              const privateCount = uniqueNewListings.filter((l: any) => l.advertiser_type === "Privatni").length;
-              const agencyCount = uniqueNewListings.length - privateCount;
-              await dbLog(`[${category}] ✅ Saved ${uniqueNewListings.length} listings (${privateCount} private, ${agencyCount} agency).`, "success");
-              cycleNewAds += uniqueNewListings.length;
-            }
+          if (insertError) {
+            await dbLog(`[${category}] Insert error: ${insertError.message}`, "error");
+          } else {
+            const privateCount = uniqueNewListings.filter((l: any) => l.advertiser_type === "Privatni").length;
+            const agencyCount = uniqueNewListings.length - privateCount;
+            await dbLog(
+              `[${category}] ✅ Saved ${uniqueNewListings.length} listings (${privateCount} private, ${agencyCount} agency).`,
+              "success"
+            );
+            cycleNewAds += uniqueNewListings.length;
           }
         }
       }
 
-      // Log this category scan to the database for stats tracking
       await (supabase as any).from("category_scans").insert({
         category: category,
         worker_id: WORKER_ID,
       });
 
-      // Wait between categories (looks human)
       if (i < categoryKeys.length - 1 && !shuttingDown) {
         const delay = CATEGORY_DELAY_MS.min + Math.floor(Math.random() * (CATEGORY_DELAY_MS.max - CATEGORY_DELAY_MS.min));
         await dbLog(`Waiting ${Math.round(delay / 1000)}s before next category...`, "info");
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await interruptibleSleep(delay);
       }
     }
 
@@ -618,17 +677,15 @@ async function runMonitor() {
     totalNewAds += cycleNewAds;
     totalPrivateAds += cyclePrivateAds;
     const cycleDuration = Math.round((Date.now() - cycleStart) / 1000);
-
     const cycleMB = cycleProxyBytes / (1024 * 1024);
 
     await dbLog(`\n${"─".repeat(60)}`, "info");
     await dbLog(`Cycle #${totalCycles} complete in ${cycleDuration}s`, "info");
     await dbLog(`  This cycle: ${cycleNewAds} ads saved (${cyclePrivateAds} private)`, "success");
     await dbLog(`  All time:   ${totalNewAds} ads saved (${totalCycles} cycles)`, "info");
-    await dbLog(`  Proxy traffic: ${cycleMB.toFixed(1)} MB (approx, via Content-Length)`, "info");
+    await dbLog(`  Proxy traffic: ${cycleMB.toFixed(1)} MB (approx)`, "info");
     await dbLog(`${"─".repeat(60)}`, "info");
 
-    // Log scrape run to database (includes worker_id, cycle_duration_s, proxy_bytes for stats)
     await (supabase as any).from("scrape_runs").insert({
       source: "njuskalo",
       status: blocked ? "error" : "success",
@@ -640,89 +697,27 @@ async function runMonitor() {
       proxy_bytes: cycleProxyBytes,
     });
 
-    // Rest between full cycles
+    // Integrated Notification Poller
+    try {
+      await dbLog(`[Notify] Checking notification filters for new matches...`, "info");
+      await runNotificationPoll();
+    } catch (notifyErr: any) {
+      await dbLog(`[Notify] Error running notification poll: ${notifyErr.message}`, "warning");
+    }
+
+    // Periodical Rest Scheduling
     if (!shuttingDown) {
-      let rest = CYCLE_REST_MS.min + Math.floor(Math.random() * (CYCLE_REST_MS.max - CYCLE_REST_MS.min));
+      const elapsedMs = Date.now() - cycleStart;
+      const targetIntervalMs = workerIntervalMin * 60 * 1000;
+      const remainingSleepMs = Math.max(5000, targetIntervalMs - elapsedMs);
 
-      const croatiaTime = new Date().toLocaleString("en-US", { timeZone: "Europe/Zagreb" });
-      const croatiaHour = new Date(croatiaTime).getHours();
-      // "Night shift" from 1 AM to 6 AM (Assuming '1pm' was a typo, using 1 to 6)
-      const isNightShift = croatiaHour >= 1 && croatiaHour < 6;
+      await dbLog(
+        `[Schedule] Worker ${WORKER_ID} target period: ${workerIntervalMin} min. Cycle took ${cycleDuration}s. Resting ${Math.round(remainingSleepMs / 1000)}s until next scan...\n`,
+        "info"
+      );
+      await interruptibleSleep(remainingSleepMs);
 
-      let targetDuration = 60;
-      let threshold = 60; // For log message in day mode
-
-      if (isNightShift) {
-        // Night mode: Keep current long delays to avoid bot detection during low traffic
-        if (WORKER_ID === 1) {
-          targetDuration = 480 + Math.floor(Math.random() * 120); // 8 to 10 mins
-        } else if (WORKER_ID === 2) {
-          targetDuration = 1200 + Math.floor(Math.random() * 300); // 20 to 25 mins
-        }
-      } else {
-        // Day mode: Graduated sliding-scale approach
-        let targetMin, targetMax;
-
-        if (WORKER_ID === 1) {
-          if (cycleDuration < 35) {
-            // Very fast cycle: aggressive penalty
-            threshold = 35;
-            targetMin = 240;
-            targetMax = 390;
-          } else if (cycleDuration < 60) {
-            // Somewhat fast cycle: moderate penalty
-            threshold = 60;
-            targetMin = 90;
-            targetMax = 140;
-          } else {
-            // Natural pace: no penalty
-            threshold = 60;
-            targetDuration = cycleDuration;
-          }
-        } else if (WORKER_ID === 2) {
-          if (cycleDuration < 120) {
-            // Very fast cycle: aggressive penalty
-            threshold = 120;
-            targetMin = 500;
-            targetMax = 760;
-          } else if (cycleDuration < 240) {
-            // Somewhat fast cycle: moderate penalty
-            threshold = 240;
-            targetMin = 240;
-            targetMax = 350;
-          } else {
-            // Natural pace: no penalty
-            threshold = 240;
-            targetDuration = cycleDuration;
-          }
-        } else {
-          // Fallback for other workers
-          threshold = 60;
-          if (cycleDuration < 60) {
-            targetMin = 60;
-            targetMax = 90;
-          } else {
-            targetDuration = cycleDuration;
-          }
-        }
-
-        // Apply random target if not already set to cycleDuration
-        if (targetMin !== undefined && targetMax !== undefined) {
-          targetDuration = targetMin + Math.floor(Math.random() * (targetMax - targetMin + 1));
-        }
-      }
-
-      if (cycleDuration < targetDuration) {
-        const extraWait = (targetDuration - cycleDuration) * 1000;
-        rest += extraWait;
-        const msgType = isNightShift ? "Night shift active" : `Fast cycle (< ${threshold}s)`;
-        await dbLog(`${msgType} (cycle took ${cycleDuration}s). Enforcing ${targetDuration}s minimum cycle duration. Adding ${Math.round(extraWait / 1000)}s wait.`, "warning");
-      }
-
-      await dbLog(`Resting ${Math.round(rest / 1000)}s before next cycle...\n`, "info");
-      await new Promise((resolve) => setTimeout(resolve, rest));
-
-      // Periodic Browser Restart (every 50 cycles) — new sticky IP + fresh fingerprint
+      // Periodic Browser Restart (every 50 cycles)
       if (totalCycles > 0 && totalCycles % 50 === 0) {
         await dbLog(`[Periodic Restart] Reached ${totalCycles} cycles. Rotating sticky IP...`, "info");
         try { if (proxyBundle) await proxyBundle.ctx.close(); } catch { /* ignore */ }
@@ -731,14 +726,8 @@ async function runMonitor() {
 
         userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
         stickySessionId = makeSessionId();
-        browser = await chromium.launch({
-          headless: true,
-          args: BROWSER_ARGS,
-        });
-        context = await browser.newContext({
-          ...BASE_CONTEXT_OPTS,
-          userAgent,
-        });
+        browser = await chromium.launch({ headless: true, args: BROWSER_ARGS });
+        context = await browser.newContext({ ...BASE_CONTEXT_OPTS, userAgent });
         page = await context.newPage();
         attachByteCounter(page);
         proxyBundle = await createProxyBundle(browser, userAgent, stickySessionId);
@@ -747,7 +736,7 @@ async function runMonitor() {
 
         await dbLog(
           `Browser restarted — UA: ${userAgent.substring(0, 40)}... session: ${stickySessionId}`,
-          "info",
+          "info"
         );
         if (proxyBundle) {
           const egressIp = await verifyProxyEgress(searchPage);

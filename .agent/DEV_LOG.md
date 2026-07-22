@@ -1,5 +1,27 @@
 # Development Log
 
+## [2026-07-22] Smart Scheduling, Incremental Pagination & Remote Supabase Control
+
+### 47. Periodical monitor scheduling, incremental catchup pagination, integrated notify poll & UI remote config
+- **Goal**: Implement configurable periodical monitor cycles (W1 every 30 min, W2 every 5 hours), nighttime sleep window (2 AM – 6 AM Croatia time), multi-page incremental pagination up to the known-ads boundary, native Telegram notification trigger inside worker cycles, and zero-SSH remote configuration from the dashboard UI.
+- **Incremental Catchup Pagination**:
+  - Added `scrapeSearchPagesUntilKnown(page, category, knownIds, maxPages)` in `src/lib/scraper/njuskalo.ts`.
+  - Scrapes search pages sequentially (`page=1`, `page=2`, ...).
+  - Stops automatically as soon as an entire page returns listings that are all already known in the database (catchup boundary reached), or when `maxPages` safety cap (default 10) is hit.
+- **Periodical Scheduling & Night Mode**:
+  - Replaced continuous loop and adaptive rest duration penalty with fixed-period sleep (`interruptibleSleep`).
+  - Worker 1 targets `w1_interval_min` (30 min default), Worker 2 targets `w2_interval_min` (300 min default).
+  - Evaluates current time in `Europe/Zagreb` timezone. Automatically enters 15-minute sleep loops during night window (`night_start_hour` 2 to `night_end_hour` 6).
+- **Integrated Telegram Notifications**:
+  - Extracted core filter-matching and Telegram notification dispatch logic into reusable `src/lib/notifications/poll.ts` (`runNotificationPoll`).
+  - Workers invoke `runNotificationPoll()` at the end of each cycle after inserting new listings.
+  - Removed standalone `notify-poll` app from `ecosystem.config.cjs`.
+- **Remote Config (UI → Supabase)**:
+  - Created `scraper_config` table in Supabase (dev + prod databases) initialized with defaults (`w1_interval_min`, `w2_interval_min`, `night_start_hour`, `night_end_hour`, `max_pages_per_category`, `workers_enabled`).
+  - Added `src/app/api/scraper-config/route.ts` (`GET`/`PUT`).
+  - Added `src/components/ScraperConfigCard.tsx` UI card on the Live Monitor dashboard. Workers fetch and honor remote config changes dynamically on every cycle without requiring SSH/PM2 process restarts.
+- **Files modified/created**: `src/lib/scraper/njuskalo.ts`, `src/lib/notifications/poll.ts`, `scripts/notify-poll.ts`, `src/lib/supabase/types.ts`, `src/app/api/scraper-config/route.ts`, `src/components/ScraperConfigCard.tsx`, `src/components/MonitorDashboard.tsx`, `scripts/monitor.ts`, `ecosystem.config.cjs`, `.agent/DEV_LOG.md`.
+
 ## [2026-07-21] Oglasnik.hr Integration & Next.js RSC / DOM Parsing
 
 ### 46. Oglasnik.hr integration, RSC / DOM rendering discovery & dashboard filter fix
