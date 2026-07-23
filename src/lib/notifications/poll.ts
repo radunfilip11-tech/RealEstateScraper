@@ -34,56 +34,69 @@ function quoteOrValue(value: string): string {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyFilterCriteria(query: any, filter: NotificationFilter) {
-  if (filter.property_types.length > 0) {
-    query = query.in("property_type", filter.property_types);
+  // Defensive defaults — prod DB may not have newer columns yet, returning undefined
+  const propertyTypes = filter.property_types ?? [];
+  const transactionTypes = filter.transaction_types ?? [];
+  const sources = filter.sources ?? [];
+  const advertiserTypes = filter.advertiser_types ?? [];
+  const statuses = filter.statuses ?? [];
+  const locationCounties = filter.location_counties ?? [];
+  const locationCities = filter.location_cities ?? [];
+  const locationNeighborhoods = filter.location_neighborhoods ?? [];
+  const landTypes = filter.land_types ?? [];
+  const houseTypes = filter.house_types ?? [];
+  const commercialTypes = filter.commercial_types ?? [];
+
+  if (propertyTypes.length > 0) {
+    query = query.in("property_type", propertyTypes);
   }
-  if (filter.transaction_types.length > 0) {
-    query = query.in("transaction_type", filter.transaction_types);
+  if (transactionTypes.length > 0) {
+    query = query.in("transaction_type", transactionTypes);
   }
-  if (filter.sources.length > 0) {
-    query = query.in("source", filter.sources);
+  if (sources.length > 0) {
+    query = query.in("source", sources);
   }
-  if (filter.advertiser_types.length > 0) {
-    query = query.in("advertiser_type", filter.advertiser_types);
+  if (advertiserTypes.length > 0) {
+    query = query.in("advertiser_type", advertiserTypes);
   }
-  if (filter.statuses.length > 0) {
-    query = query.in("status", filter.statuses);
+  if (statuses.length > 0) {
+    query = query.in("status", statuses);
   }
 
-  if (filter.price_min !== null) query = query.gte("price_numeric", filter.price_min);
-  if (filter.price_max !== null) query = query.lte("price_numeric", filter.price_max);
-  if (filter.size_min !== null) query = query.gte("size_m2", filter.size_min);
-  if (filter.size_max !== null) query = query.lte("size_m2", filter.size_max);
-  if (filter.room_count_min !== null) query = query.gte("room_count", filter.room_count_min);
-  if (filter.room_count_max !== null) query = query.lte("room_count", filter.room_count_max);
-  if (filter.land_types.length > 0) query = query.in("land_type", filter.land_types);
-  if (filter.house_types.length > 0) query = query.in("house_type", filter.house_types);
-  if (filter.commercial_types.length > 0) query = query.in("commercial_type", filter.commercial_types);
-  if (filter.yard_size_min !== null) query = query.gte("yard_size_m2", filter.yard_size_min);
-  if (filter.yard_size_max !== null) query = query.lte("yard_size_m2", filter.yard_size_max);
+  if (filter.price_min !== null && filter.price_min !== undefined) query = query.gte("price_numeric", filter.price_min);
+  if (filter.price_max !== null && filter.price_max !== undefined) query = query.lte("price_numeric", filter.price_max);
+  if (filter.size_min !== null && filter.size_min !== undefined) query = query.gte("size_m2", filter.size_min);
+  if (filter.size_max !== null && filter.size_max !== undefined) query = query.lte("size_m2", filter.size_max);
+  if (filter.room_count_min != null) query = query.gte("room_count", filter.room_count_min);
+  if (filter.room_count_max != null) query = query.lte("room_count", filter.room_count_max);
+  if (landTypes.length > 0) query = query.in("land_type", landTypes);
+  if (houseTypes.length > 0) query = query.in("house_type", houseTypes);
+  if (commercialTypes.length > 0) query = query.in("commercial_type", commercialTypes);
+  if (filter.yard_size_min != null) query = query.gte("yard_size_m2", filter.yard_size_min);
+  if (filter.yard_size_max != null) query = query.lte("yard_size_m2", filter.yard_size_max);
 
   // Location matching: If ANY location filters are set, the listing must
   // match AT LEAST ONE of county/city/neighborhood (OR logic across them).
   const hasLocationFilters =
-    filter.location_counties.length > 0 ||
-    filter.location_cities.length > 0 ||
-    filter.location_neighborhoods.length > 0;
+    locationCounties.length > 0 ||
+    locationCities.length > 0 ||
+    locationNeighborhoods.length > 0;
 
   if (hasLocationFilters) {
     const orParts: string[] = [];
-    if (filter.location_counties.length > 0) {
+    if (locationCounties.length > 0) {
       orParts.push(
-        `location_county.in.(${filter.location_counties.map(quoteOrValue).join(",")})`
+        `location_county.in.(${locationCounties.map(quoteOrValue).join(",")})`
       );
     }
-    if (filter.location_cities.length > 0) {
+    if (locationCities.length > 0) {
       orParts.push(
-        `location_city.in.(${filter.location_cities.map(quoteOrValue).join(",")})`
+        `location_city.in.(${locationCities.map(quoteOrValue).join(",")})`
       );
     }
-    if (filter.location_neighborhoods.length > 0) {
+    if (locationNeighborhoods.length > 0) {
       orParts.push(
-        `location_neighborhood.in.(${filter.location_neighborhoods.map(quoteOrValue).join(",")})`
+        `location_neighborhood.in.(${locationNeighborhoods.map(quoteOrValue).join(",")})`
       );
     }
     query = query.or(orParts.join(","));
