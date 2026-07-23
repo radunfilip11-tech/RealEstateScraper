@@ -31,6 +31,7 @@ import {
   scrapeSearchPageOnly,
   scrapeSearchPagesUntilKnown,
   randomDelay,
+  fetchDetailPagePlaywright,
 } from "../src/lib/scraper/njuskalo";
 import { runNotificationPoll } from "../src/lib/notifications/poll";
 import { DEFAULT_SCRAPER_CONFIG, type ScraperConfig } from "../src/lib/supabase/types";
@@ -626,6 +627,23 @@ async function runMonitor() {
         );
 
         for (const listing of uniqueNewListings) {
+          // If it's land, check detail page to be absolutely sure of the type and size
+          if (category === "zemljista" || category === "najam_zemljista") {
+            try {
+              await randomDelay(1500, 3000);
+              await dbLog(`[${category}] Fetching detail page for land type: ${listing.external_id}`, "info");
+              const detail = await fetchDetailPagePlaywright(detailPage, listing.url);
+              if (detail.landType) {
+                listing.land_type = detail.landType;
+              }
+              if (detail.sizeM2) {
+                listing.size_m2 = detail.sizeM2;
+              }
+            } catch (err: any) {
+              await dbLog(`[${category}] Failed detail fetch for ${listing.external_id}: ${err.message}`, "warn");
+            }
+          }
+
           const isPrivate = listing.advertiser_type === "Privatni";
           if (isPrivate) {
             cyclePrivateAds++;

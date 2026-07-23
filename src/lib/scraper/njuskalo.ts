@@ -31,20 +31,12 @@ export const CATEGORIES: Record<string, string> = {
 };
 
 export const WORKER_CATEGORIES: Record<number, string[]> = {
-  // Worker 1: Highest-traffic — apartments for sale (43k listings)
-  1: [
-    "stanovi",
-  ],
-  // Worker 2: Houses + rental apartments (~37k listings)
-  2: [
-    "kuce", "najam_stanova",
-  ],
-  // Worker 3: Land + commercial (~30k listings)
-  3: [
-    "zemljista", "poslovni_prostori", "najam_poslovnih_prostora", "najam_zemljista",
-  ],
-  // Worker 4: Everything else — garages, luxury, new builds, rentals (~9k across many categories)
-  4: [
+  1: ["stanovi"],
+  2: ["kuce"],
+  3: ["zemljista"],
+  4: ["najam_stanova"],
+  5: ["poslovni_prostori", "najam_poslovnih_prostora", "najam_zemljista"],
+  6: [
     "vikendice", "garaze", "novogradnja",
     "luksuzne_kuce", "luksuzni_stanovi",
     "najam_kuca", "najam_garaza",
@@ -132,6 +124,7 @@ export function parseDetailPageHTML(html: string): {
   locationCity: string | null;
   locationNeighborhood: string | null;
   sizeM2: number | null;
+  landType: string | null;
   advertiserType: string | null;
   isPromoted: boolean;
   publishedAt: string | null;
@@ -143,6 +136,7 @@ export function parseDetailPageHTML(html: string): {
   let locationCity: string | null = null;
   let locationNeighborhood: string | null = null;
   let sizeM2: number | null = null;
+  let landType: string | null = null;
   let advertiserType: string | null = null;
 
   // --- Price ---
@@ -202,6 +196,16 @@ export function parseDetailPageHTML(html: string): {
     advertiserType = "Privatni";
   }
 
+  // --- Land type ---
+  const landTypePattern = /(?:vrst[ae]|tip)\s*(?:zemlji[šs]ta)?[^<]*<\/(?:th|dt|span|div)>\s*<(?:td|dd|span|div)[^>]*>([^<]{3,60})<\/(?:td|dd|span|div)/gi;
+  const landMatches = [...html.matchAll(landTypePattern)];
+  for (const m of landMatches) {
+    const val = m[1].trim();
+    if (/poljoprivredn/i.test(val)) landType = "Poljoprivredno";
+    else if (/[šs]umsk/i.test(val)) landType = "Šumsko";
+    else if (/gra[đd]evinsk/i.test(val)) landType = "Građevinsko";
+  }
+
   // --- Promoted (detail page contains "Istaknuto oglašavanje" or "Ovaj oglas je istaknut.") ---
   const isPromoted = /istaknuto ogla/i.test(html) || /oglas je istaknut/i.test(html) || /VauVau/i.test(html) || /SuperVau/i.test(html);
 
@@ -212,7 +216,7 @@ export function parseDetailPageHTML(html: string): {
     publishedAt = pubMatch[1];
   }
 
-  return { price, priceNumeric, location, locationCounty, locationCity, locationNeighborhood, sizeM2, advertiserType, isPromoted, publishedAt };
+  return { price, priceNumeric, location, locationCounty, locationCity, locationNeighborhood, sizeM2, landType, advertiserType, isPromoted, publishedAt };
 }
 
 /**

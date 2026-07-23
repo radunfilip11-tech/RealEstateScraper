@@ -135,16 +135,37 @@ function extractSizeFromDetail(html: string): number | null {
 // Land type extraction from detail page HTML
 // ---------------------------------------------------------------------------
 function extractLandTypeFromDetail(html: string, title?: string): string | null {
-  // Check for specific type badges or text in HTML
-  if (/gra[đd]evinsk/i.test(html)) return "Građevinsko";
-  if (/poljoprivredn/i.test(html)) return "Poljoprivredno";
-  if (/[šs]umsk/i.test(html)) return "Šumsko";
-
+  // 1. Check title FIRST — most reliable because it's user-written, not site chrome
   if (title) {
-    if (/gra[đd]evinsk/i.test(title)) return "Građevinsko";
     if (/poljoprivredn/i.test(title)) return "Poljoprivredno";
     if (/[šs]umsk/i.test(title)) return "Šumsko";
+    if (/gra[đd]evinsk/i.test(title)) return "Građevinsko";
   }
+
+  // 2. Look in structured detail-page data tables only (th/td, dt/dd pairs)
+  //    NOT the entire HTML — the full page always has "građevinsk" in nav/breadcrumbs.
+  //    Match patterns like:
+  //      <th>Vrsta zemljišta</th><td>Poljoprivredno</td>
+  //      <dt>Tip</dt><dd>Građevinsko zemljište</dd>
+  const tableValuePattern = /(?:vrst[ae]|tip)\s*(?:zemlji[šs]ta)?[^<]*<\/(?:th|dt|span|div)>\s*<(?:td|dd|span|div)[^>]*>([^<]{3,60})<\/(?:td|dd|span|div)/gi;
+  const tableMatches = [...html.matchAll(tableValuePattern)];
+  for (const m of tableMatches) {
+    const val = m[1].trim();
+    if (/poljoprivredn/i.test(val)) return "Poljoprivredno";
+    if (/[šs]umsk/i.test(val)) return "Šumsko";
+    if (/gra[đd]evinsk/i.test(val)) return "Građevinsko";
+  }
+
+  // 3. Broader fallback: scan <h1>/<h2> headings (ad title rendered in the page)
+  const headingPattern = /<h[12][^>]*>([^<]+)<\/h[12]>/gi;
+  const headingMatches = [...html.matchAll(headingPattern)];
+  for (const m of headingMatches) {
+    const heading = m[1];
+    if (/poljoprivredn/i.test(heading)) return "Poljoprivredno";
+    if (/[šs]umsk/i.test(heading)) return "Šumsko";
+    if (/gra[đd]evinsk/i.test(heading)) return "Građevinsko";
+  }
+
   return null;
 }
 

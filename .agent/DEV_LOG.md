@@ -1,6 +1,19 @@
 # Development Log
 
-## [2026-07-22] Category-Specific Fields, UI Filters, and 4-Worker Split
+## [2026-07-23] Land Type Classification Fix & Live Monitor Detail Page Enforcement
+
+### 49. Land Type Detail Extraction & Live Monitor Enforcement
+- **Land Type Classification Fix**:
+  - Identified that `extractLandTypeFromDetail` in `scripts/detail-fill.ts` was scanning the entire page HTML first, causing false positives for "Građevinsko" due to site navigation/breadcrumb links.
+  - Refactored `extractLandTypeFromDetail` to prioritize title matching and search specifically within structured table elements (`<dt>`, `<dd>`, `<th>`, `<td>`), ignoring site chrome.
+  - Corrected 384 misclassified listings in both the dev and production Supabase databases (updating `land_type` to `Poljoprivredno` or `Šumsko`).
+- **Live Monitor Detail Fetching**:
+  - Updated `parseDetailPageHTML` in `src/lib/scraper/njuskalo.ts` to extract `landType`.
+  - Modified `scripts/monitor.ts` so live monitor workers explicitly visit detail pages for newly detected land ads (`zemljista`, `najam_zemljista`) to extract `land_type` and `size_m2` with 100% accuracy directly from the detail page structured data.
+- **Worker Configuration**:
+  - Rebalanced `WORKER_CATEGORIES` in `src/lib/scraper/njuskalo.ts` to support 6 parallel workers.
+  - Created `scripts/start-full-scrape.ps1` for launching multi-worker runs.
+
 
 ### 48. Detailed Listing Data Extraction & Advanced Filtering
 - **Goal**: Extract rich category-specific details (room count, floor, yard size, land type, house type, commercial type, garage type) without opening detail pages, split scraping load across 4 workers, and enable these fields as filters in the dashboard and Telegram notifications.
