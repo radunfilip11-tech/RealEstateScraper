@@ -31,16 +31,23 @@ export const CATEGORIES: Record<string, string> = {
 };
 
 export const WORKER_CATEGORIES: Record<number, string[]> = {
-  // Worker 1: High-traffic sprint — only 6 categories, ~1min cycle
+  // Worker 1: Highest-traffic — apartments for sale (43k listings)
   1: [
-    "stanovi", "kuce", "zemljista", "najam_stanova",
+    "stanovi",
   ],
-  // Worker 2: Full coverage — 10 categories, ~4-5min cycle
-  // High-traffic categories interleaved for even spacing
+  // Worker 2: Houses + rental apartments (~37k listings)
   2: [
-    "najam_kuca", "vikendice", "poslovni_prostori", "luksuzne_kuce",
-    "luksuzni_stanovi", "garaze","novogradnja", "najam_garaza", 
-    "najam_zemljista", "najam_poslovnih_prostora",
+    "kuce", "najam_stanova",
+  ],
+  // Worker 3: Land + commercial (~30k listings)
+  3: [
+    "zemljista", "poslovni_prostori", "najam_poslovnih_prostora", "najam_zemljista",
+  ],
+  // Worker 4: Everything else — garages, luxury, new builds, rentals (~9k across many categories)
+  4: [
+    "vikendice", "garaze", "novogradnja",
+    "luksuzne_kuce", "luksuzni_stanovi",
+    "najam_kuca", "najam_garaza",
     "najam_luksuznih_kuca", "najam_luksuznih_stanova",
   ],
 };
@@ -323,10 +330,15 @@ export function parseListingsFromSearchJSON(
           ? abstractValues.join(", ").substring(0, 500)
           : null;
 
-      // --- Size (m²) from an abstract like "Stambena površina: 76.36 m2" or "Zemljišna površina: 1.250 m2" ---
+      // --- Size (m²) from an abstract like "Stambena površina: 76.36 m2", "Zemljišna površina: 1.250 m2", or just "830 m2" ---
       let sizeM2: number | null = null;
       for (const v of abstractValues) {
-        const sm = v.match(/(?:povr[šs]ina|zemlji[šs]t[ea])[^0-9]*([\d.\s]+(?:,\d+)?)\s*m/i);
+        // Try with prefix first
+        let sm = v.match(/(?:povr[šs]ina|zemlji[šs]t[ea])[^0-9]*([\d.\s]+(?:,\d+)?)\s*m/i);
+        if (!sm) {
+          // If no prefix, just try to match a number immediately followed by m2 (e.g. "830 m2", "1.250 m²")
+          sm = v.match(/^([\d.\s]+(?:,\d+)?)\s*m(?:2|²)$/i);
+        }
         if (sm) {
           const parsed = parseFloat(sm[1].replace(/\s/g, "").replace(/\./g, "").replace(",", "."));
           if (!isNaN(parsed)) sizeM2 = parsed;
@@ -393,6 +405,83 @@ export function parseListingsFromSearchJSON(
       const pubMatch = chunk.match(/"createdAt":"([^"]+)"/);
       if (pubMatch) publishedAt = pubMatch[1];
 
+      // --- Room count (abstracts: "2-sobni", "3.5-sobni", "Garsonijera", "Studio") ---
+      let roomCount: number | null = null;
+      for (const v of abstractValues) {
+        // "Garsonijera" / "Studio" → 1
+        if (/garsonijera|studio/i.test(v)) { roomCount = 1; break; }
+        // "2-sobni", "2.5-sobni", "2,5-sobni"
+        const rm = v.match(/^([\d]+(?:[.,][\d]+)?)-sobni?/i);
+        if (rm) {
+          const parsed = parseFloat(rm[1].replace(",", "."));
+          if (!isNaN(parsed)) { roomCount = parsed; break; }
+        }
+      }
+
+      // --- Floor (abstracts: "1. kat", "Prizemlje", "Potkrovlje") ---
+      let floorLabel: string | null = null;
+      for (const v of abstractValues) {
+        if (/kat|prizemlje|potkrovlje|visoko prizemlje|suteren/i.test(v)) {
+          floorLabel = v.trim();
+          break;
+        }
+      }
+
+      // --- Yard size (abstracts: "Okućnica: 300 m2") ---
+      let yardSizeM2: number | null = null;
+      for (const v of abstractValues) {
+        const ym = v.match(/oku[ćc]nica[^0-9]*([\d.\s]+(?:,\d+)?)\s*m/i);
+        if (ym) {
+          const parsed = parseFloat(ym[1].replace(/\s/g, "").replace(/\./g, "").replace(",", "."));
+          if (!isNaN(parsed)) { yardSizeM2 = parsed; break; }
+        }
+      }
+
+      // --- Land type (abstracts: "Građevinsko", "Poljoprivredno", "Šumsko") ---
+      let landType: string | null = null;
+      if (category === "zemljista" || category === "najam_zemljista") {
+        for (const v of abstractValues) {
+          if (/gra[đd]evinsk/i.test(v)) { landType = "Građevinsko"; break; }
+          if (/poljoprivredn/i.test(v)) { landType = "Poljoprivredno"; break; }
+          if (/[šs]umsk/i.test(v)) { landType = "Šumsko"; break; }
+          // Also try title for common patterns like "Građevinsko zemljište"
+        }
+        if (!landType && title) {
+          if (/gra[đd]evinsk/i.test(title)) landType = "Građevinsko";
+          else if (/poljoprivredn/i.test(title)) landType = "Poljoprivredno";
+          else if (/[šs]umsk/i.test(title)) landType = "Šumsko";
+        }
+      }
+
+      // --- House type (abstracts or title: "Samostojeća", "Dvojna kuća", "Niz") ---
+      let houseType: string | null = null;
+      if (category === "kuce" || category === "najam_kuca" || category === "luksuzne_kuce" || category === "najam_luksuznih_kuca" || category === "vikendice") {
+        const houseText = [...abstractValues, title].join(" ");
+        if (/samostoje[ćc]/i.test(houseText)) houseType = "Samostojeća";
+        else if (/dvojn/i.test(houseText)) houseType = "Dvojna";
+        else if (/\bniz\b/i.test(houseText)) houseType = "Niz";
+      }
+
+      // --- Commercial type (abstracts or title: "Ured", "Ugostiteljstvo", "Skladište", "Trgovina") ---
+      let commercialType: string | null = null;
+      if (category === "poslovni_prostori" || category === "najam_poslovnih_prostora") {
+        const commText = [...abstractValues, title].join(" ");
+        if (/ured/i.test(commText)) commercialType = "Ured";
+        else if (/ugostiteljst/i.test(commText)) commercialType = "Ugostiteljstvo";
+        else if (/skladi[šs]t/i.test(commText)) commercialType = "Skladište";
+        else if (/trgovin/i.test(commText)) commercialType = "Trgovina";
+        else if (/salon/i.test(commText)) commercialType = "Salon";
+      }
+
+      // --- Garage type (title: "Garažno mjesto", "Vanjsko parkirno") ---
+      let garageType: string | null = null;
+      if (category === "garaze" || category === "najam_garaza") {
+        const garageText = [...abstractValues, title].join(" ");
+        if (/gara[žz]no mjesto/i.test(garageText)) garageType = "Garažno mjesto";
+        else if (/vanjsko parkirno/i.test(garageText)) garageType = "Vanjsko parkirno mjesto";
+        else if (/gara[žz]/i.test(garageText)) garageType = "Garaža";
+      }
+
       listings.push({
         external_id: externalId,
         title,
@@ -415,6 +504,13 @@ export function parseListingsFromSearchJSON(
         hidden: false,
         is_promoted: isPromoted,
         published_at: publishedAt,
+        room_count: roomCount,
+        floor_label: floorLabel,
+        yard_size_m2: yardSizeM2,
+        land_type: landType,
+        house_type: houseType,
+        commercial_type: commercialType,
+        garage_type: garageType,
       });
     } catch (e) {
       console.error("[Scraper] Error parsing search JSON listing:", e);
@@ -611,6 +707,13 @@ export function parseListingsFromHTML(
         hidden: false,
         is_promoted: isPromoted,
         published_at: publishedAt,
+        room_count: null,
+        floor_label: null,
+        yard_size_m2: null,
+        land_type: null,
+        house_type: null,
+        commercial_type: null,
+        garage_type: null,
       });
     } catch (e) {
       console.error("[Scraper] Error parsing listing:", e);

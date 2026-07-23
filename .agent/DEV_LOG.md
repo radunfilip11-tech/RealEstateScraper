@@ -1,5 +1,21 @@
 # Development Log
 
+## [2026-07-22] Category-Specific Fields, UI Filters, and 4-Worker Split
+
+### 48. Detailed Listing Data Extraction & Advanced Filtering
+- **Goal**: Extract rich category-specific details (room count, floor, yard size, land type, house type, commercial type, garage type) without opening detail pages, split scraping load across 4 workers, and enable these fields as filters in the dashboard and Telegram notifications.
+- **Data Extraction**:
+  - Enhanced `parseListingsFromSearchJSON` in `njuskalo.ts` to extract `roomCount`, `floorLabel`, `yardSizeM2`, `landType`, `houseType`, `commercialType`, and `garageType` from the embedded `abstracts` text and `title` using regular expressions.
+  - Room counts mapped numerically (e.g., "Garsonijera" -> 1, "2.5-sobni" -> 2.5).
+  - Added new columns to Supabase `listings` table.
+- **4-Worker Split**:
+  - Distributed `WORKER_CATEGORIES` across 4 workers to balance load, addressing discrepancies in category sizes (e.g. 43k flats vs 800 luxury houses).
+  - Added `--worker` CLI argument to `full-scrape.ts` and split `full-scrape-progress.json` into per-worker files to support running 4 instances in parallel.
+- **UI & Notification Integration**:
+  - Updated `Dashboard.tsx` to include conditional filters (e.g., showing "Room Count" only for residential property types, "Land Type" only for Land).
+  - Updated `ListingCard.tsx` to visually display new data as badges below the listing details.
+  - Added the fields to the Telegram `NotificationFilter` configuration, and updated `poll.ts` to respect these granular criteria when matching new listings for Telegram alerts.
+
 ## [2026-07-22] Smart Scheduling, Incremental Pagination & Remote Supabase Control
 
 ### 47. Periodical monitor scheduling, incremental catchup pagination, integrated notify poll & UI remote config

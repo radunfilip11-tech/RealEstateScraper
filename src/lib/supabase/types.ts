@@ -25,6 +25,14 @@ export interface Listing {
   is_promoted?: boolean;
   published_at?: string;
   created_at: string;
+  // Category-specific enriched fields
+  room_count: number | null;
+  floor_label: string | null;
+  yard_size_m2: number | null;
+  land_type: string | null;
+  house_type: string | null;
+  commercial_type: string | null;
+  garage_type: string | null;
 }
 
 export interface ScrapeRun {
@@ -92,6 +100,15 @@ export interface NotificationFilter {
   size_min: number | null;
   size_max: number | null;
 
+  // Category-specific filters
+  room_count_min: number | null;
+  room_count_max: number | null;
+  land_types: string[];
+  house_types: string[];
+  commercial_types: string[];
+  yard_size_min: number | null;
+  yard_size_max: number | null;
+
   last_notified_at: string | null;
   created_at: string;
   updated_at: string;
@@ -135,6 +152,40 @@ export const PROPERTY_TYPES = [
   "Parkirno mjesto",
 ] as const;
 
+export const LAND_TYPES = [
+  "Građevinsko",
+  "Poljoprivredno",
+  "Šumsko",
+  "Ostalo",
+] as const;
+
+export const HOUSE_TYPES = [
+  "Samostojeća",
+  "Dvojna",
+  "Niz",
+  "Ostalo",
+] as const;
+
+export const COMMERCIAL_TYPES = [
+  "Ured",
+  "Ugostiteljstvo",
+  "Skladište",
+  "Trgovina",
+  "Salon",
+  "Ostalo",
+] as const;
+
+export const GARAGE_TYPES = [
+  "Garaža",
+  "Garažno mjesto",
+  "Vanjsko parkirno mjesto",
+] as const;
+
+export type LandType = (typeof LAND_TYPES)[number];
+export type HouseType = (typeof HOUSE_TYPES)[number];
+export type CommercialType = (typeof COMMERCIAL_TYPES)[number];
+export type GarageType = (typeof GARAGE_TYPES)[number];
+
 export const ADVERTISER_TYPES = ["Privatni", "Agencija"] as const;
 
 export const SOURCES = ["njuskalo", "oglasnik"] as const;
@@ -168,6 +219,14 @@ export interface FilterState {
   dateFrom: string;
   dateTo: string;
   dateField: 'published_at' | 'created_at';
+  // Category-specific filters
+  roomCountMin: number | null;
+  roomCountMax: number | null;
+  selectedLandTypes: string[];
+  selectedHouseTypes: string[];
+  selectedCommercialTypes: string[];
+  yardSizeMin: number | null;
+  yardSizeMax: number | null;
 }
 
 export interface FilterPreset {

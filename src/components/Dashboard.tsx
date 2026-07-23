@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Listing, FilterState } from "@/lib/supabase/types";
-import { PROPERTY_TYPES, ADVERTISER_TYPES, SOURCES, TRANSACTION_TYPES, LISTING_STATUSES } from "@/lib/supabase/types";
+import { PROPERTY_TYPES, ADVERTISER_TYPES, SOURCES, TRANSACTION_TYPES, LISTING_STATUSES, LAND_TYPES, HOUSE_TYPES, COMMERCIAL_TYPES } from "@/lib/supabase/types";
 import StatsBar from "@/components/ui/StatsBar";
 import SearchBar from "@/components/ui/SearchBar";
 import FilterDropdown from "@/components/ui/FilterDropdown";
@@ -48,6 +48,14 @@ export default function Dashboard() {
   const [dateFrom, setDateFrom] = useState<string>(DEFAULT_FILTERS.dateFrom);
   const [dateTo, setDateTo] = useState<string>(DEFAULT_FILTERS.dateTo);
   const [dateField, setDateField] = useState<"published_at" | "created_at">(DEFAULT_FILTERS.dateField);
+  // Category-specific filter state
+  const [roomCountMin, setRoomCountMin] = useState<number | null>(DEFAULT_FILTERS.roomCountMin);
+  const [roomCountMax, setRoomCountMax] = useState<number | null>(DEFAULT_FILTERS.roomCountMax);
+  const [selectedLandTypes, setSelectedLandTypes] = useState<string[]>(DEFAULT_FILTERS.selectedLandTypes);
+  const [selectedHouseTypes, setSelectedHouseTypes] = useState<string[]>(DEFAULT_FILTERS.selectedHouseTypes);
+  const [selectedCommercialTypes, setSelectedCommercialTypes] = useState<string[]>(DEFAULT_FILTERS.selectedCommercialTypes);
+  const [yardSizeMin, setYardSizeMin] = useState<number | null>(DEFAULT_FILTERS.yardSizeMin);
+  const [yardSizeMax, setYardSizeMax] = useState<number | null>(DEFAULT_FILTERS.yardSizeMax);
   // State (not ref) so the persist effect's closure reliably sees `false` on the
   // first commit and doesn't overwrite saved localStorage with defaults.
   const [filtersRestored, setFiltersRestored] = useState(false);
@@ -108,11 +116,20 @@ export default function Dashboard() {
     dateFrom,
     dateTo,
     dateField,
+    roomCountMin,
+    roomCountMax,
+    selectedLandTypes,
+    selectedHouseTypes,
+    selectedCommercialTypes,
+    yardSizeMin,
+    yardSizeMax,
   }), [
     search, selectedCounties, selectedCities, selectedNeighborhoods,
     selectedSources, selectedPropertyTypes, selectedTransactionTypes,
     selectedAdvertiserTypes, selectedStatuses, showHidden,
     priceMin, priceMax, sizeMin, sizeMax, sort, dateFrom, dateTo, dateField,
+    roomCountMin, roomCountMax, selectedLandTypes, selectedHouseTypes, selectedCommercialTypes,
+    yardSizeMin, yardSizeMax,
   ]);
 
   // Restore last used filters from localStorage after first render (avoids hydration mismatch)
@@ -138,6 +155,13 @@ export default function Dashboard() {
       setDateFrom(saved.dateFrom);
       setDateTo(saved.dateTo);
       setDateField(saved.dateField);
+      setRoomCountMin(saved.roomCountMin ?? null);
+      setRoomCountMax(saved.roomCountMax ?? null);
+      setSelectedLandTypes(saved.selectedLandTypes ?? []);
+      setSelectedHouseTypes(saved.selectedHouseTypes ?? []);
+      setSelectedCommercialTypes(saved.selectedCommercialTypes ?? []);
+      setYardSizeMin(saved.yardSizeMin ?? null);
+      setYardSizeMax(saved.yardSizeMax ?? null);
     }
     setFiltersRestored(true);
   }, []);
@@ -168,6 +192,13 @@ export default function Dashboard() {
     setDateFrom(f.dateFrom);
     setDateTo(f.dateTo);
     setDateField(f.dateField);
+    setRoomCountMin(f.roomCountMin ?? null);
+    setRoomCountMax(f.roomCountMax ?? null);
+    setSelectedLandTypes(f.selectedLandTypes ?? []);
+    setSelectedHouseTypes(f.selectedHouseTypes ?? []);
+    setSelectedCommercialTypes(f.selectedCommercialTypes ?? []);
+    setYardSizeMin(f.yardSizeMin ?? null);
+    setYardSizeMax(f.yardSizeMax ?? null);
   }, []);
 
   const latestFetchId = useRef<number>(0);
@@ -252,6 +283,15 @@ export default function Dashboard() {
         query = query.lte("size_m2", sizeMax);
       }
 
+      // Category-specific filters
+      if (roomCountMin !== null) query = query.gte("room_count", roomCountMin);
+      if (roomCountMax !== null) query = query.lte("room_count", roomCountMax);
+      if (selectedLandTypes.length > 0) query = query.in("land_type", selectedLandTypes);
+      if (selectedHouseTypes.length > 0) query = query.in("house_type", selectedHouseTypes);
+      if (selectedCommercialTypes.length > 0) query = query.in("commercial_type", selectedCommercialTypes);
+      if (yardSizeMin !== null) query = query.gte("yard_size_m2", yardSizeMin);
+      if (yardSizeMax !== null) query = query.lte("yard_size_m2", yardSizeMax);
+
       // Apply date/time range filter
       if (dateFrom) {
         query = query.gte(dateField, new Date(dateFrom).toISOString());
@@ -297,6 +337,13 @@ export default function Dashboard() {
     dateFrom,
     dateTo,
     dateField,
+    roomCountMin,
+    roomCountMax,
+    selectedLandTypes,
+    selectedHouseTypes,
+    selectedCommercialTypes,
+    yardSizeMin,
+    yardSizeMax,
   ]);
 
   useEffect(() => {
@@ -361,6 +408,11 @@ export default function Dashboard() {
     priceMin !== null || priceMax !== null,
     sizeMin !== null || sizeMax !== null,
     dateFrom !== "" || dateTo !== "",
+    roomCountMin !== null || roomCountMax !== null,
+    selectedLandTypes.length > 0,
+    selectedHouseTypes.length > 0,
+    selectedCommercialTypes.length > 0,
+    yardSizeMin !== null || yardSizeMax !== null,
   ].filter(Boolean).length;
 
   const clearAllFilters = () => {
@@ -507,6 +559,71 @@ export default function Dashboard() {
           onMinChange={setSizeMin}
           onMaxChange={setSizeMax}
         />
+
+        {/* --- Conditional category-specific filters --- */}
+
+        {/* Rooms: show when Stan, Kuća, Vikendica, Luksuzni stan, Luksuzna kuća, Novogradnja selected */}
+        {(selectedPropertyTypes.length === 0 ||
+          selectedPropertyTypes.some(t => ["Stan", "Kuća", "Vikendica", "Luksuzni stan", "Luksuzna kuća", "Novogradnja"].includes(t))) && (
+          <RangeFilter
+            id="rooms"
+            label="Sobe"
+            unit="sob."
+            min={roomCountMin}
+            max={roomCountMax}
+            onMinChange={setRoomCountMin}
+            onMaxChange={setRoomCountMax}
+          />
+        )}
+
+        {/* Land type: show when Zemljište selected */}
+        {(selectedPropertyTypes.length === 0 ||
+          selectedPropertyTypes.includes("Zemljište")) && (
+          <FilterDropdown
+            id="land-type"
+            label="Tip zemljišta"
+            options={[...LAND_TYPES]}
+            selected={selectedLandTypes}
+            onChange={setSelectedLandTypes}
+          />
+        )}
+
+        {/* House type: show when Kuća, Vikendica, or Luksuzna kuća selected */}
+        {(selectedPropertyTypes.some(t => ["Kuća", "Vikendica", "Luksuzna kuća"].includes(t))) && (
+          <FilterDropdown
+            id="house-type"
+            label="Tip kuće"
+            options={[...HOUSE_TYPES]}
+            selected={selectedHouseTypes}
+            onChange={setSelectedHouseTypes}
+          />
+        )}
+
+        {/* Yard size: show when Kuća, Vikendica, or Luksuzna kuća selected */}
+        {(selectedPropertyTypes.some(t => ["Kuća", "Vikendica", "Luksuzna kuća"].includes(t))) && (
+          <RangeFilter
+            id="yard-size"
+            label="Okućnica (m²)"
+            unit="m²"
+            min={yardSizeMin}
+            max={yardSizeMax}
+            onMinChange={setYardSizeMin}
+            onMaxChange={setYardSizeMax}
+          />
+        )}
+
+        {/* Commercial type: show when Poslovni prostor selected */}
+        {(selectedPropertyTypes.some(t => t === "Poslovni prostor")) && (
+          <FilterDropdown
+            id="commercial-type"
+            label="Namjena prostora"
+            options={[...COMMERCIAL_TYPES]}
+            selected={selectedCommercialTypes}
+            onChange={setSelectedCommercialTypes}
+          />
+        )}
+
+
         <DateRangeFilter
           dateFrom={dateFrom}
           dateTo={dateTo}

@@ -188,6 +188,13 @@ export async function parseOglasnikPage(
       source: "oglasnik",
       description: null,
       hidden: false,
+      room_count: null,
+      floor_label: null,
+      yard_size_m2: null,
+      land_type: null,
+      house_type: null,
+      commercial_type: null,
+      garage_type: null,
     });
   }
 

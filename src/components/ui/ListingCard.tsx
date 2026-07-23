@@ -181,6 +181,37 @@ export default function ListingCard({ listing, onHide }: ListingCardProps) {
           </div>
 
           <div className="flex items-center gap-3 flex-shrink-0">
+            {/* Category-specific detail chips */}
+            {listing.room_count != null && (
+              <span className="text-xs text-gray-500 font-medium" title="Broj soba">
+                🛏 {listing.room_count} sob.
+              </span>
+            )}
+            {listing.floor_label && (
+              <span className="text-xs text-gray-500 font-medium" title="Kat">
+                🏢 {listing.floor_label}
+              </span>
+            )}
+            {listing.land_type && (
+              <span className="text-xs text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded" title="Tip zemljišta">
+                {listing.land_type}
+              </span>
+            )}
+            {listing.house_type && (
+              <span className="text-xs text-amber-600 font-medium bg-amber-50 px-1.5 py-0.5 rounded" title="Tip kuće">
+                {listing.house_type}
+              </span>
+            )}
+            {listing.commercial_type && (
+              <span className="text-xs text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded" title="Namjena">
+                {listing.commercial_type}
+              </span>
+            )}
+            {listing.yard_size_m2 != null && (
+              <span className="text-xs text-gray-500 font-medium" title="Okućnica">
+                🌿 {listing.yard_size_m2} m²
+              </span>
+            )}
             {listing.size_m2 && (
               <span className="text-xs text-gray-500 font-medium">
                 {listing.size_m2} m²
@@ -193,6 +224,7 @@ export default function ListingCard({ listing, onHide }: ListingCardProps) {
             )}
           </div>
           </div>
+
           </div>
         </div>
       </a>

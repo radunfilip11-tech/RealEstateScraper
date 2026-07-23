@@ -1,18 +1,20 @@
 /**
  * Full Database Population Scraper
  *
- * One-off script to populate the database with ALL active Njuškalo ads
+ * One-off script to populate the database with ALL active NjuÅ¡kalo ads
  * (both private and agency) across all 17 categories.
  *
- * Runs locally without proxy — uses slow, human-like delays to avoid
+ * Runs locally without proxy â€” uses slow, human-like delays to avoid
  * bot detection on your home IP. Saves progress to a local JSON file
  * so you can stop/resume at any time.
  *
  * Usage:
- *   npx tsx scripts/full-scrape.ts                  # Resume or start fresh
- *   npx tsx scripts/full-scrape.ts --reset           # Wipe progress, start over
- *   npx tsx scripts/full-scrape.ts --category stanovi # Scrape one category only
- *   npx tsx scripts/full-scrape.ts --max-pages 50    # Cap pages per category
+ *   npx tsx scripts/full-scrape.ts                        # Resume or start fresh
+ *   npx tsx scripts/full-scrape.ts --reset                # Wipe progress, start over
+ *   npx tsx scripts/full-scrape.ts --worker 1             # Run only Worker 1's categories
+ *   npx tsx scripts/full-scrape.ts --worker 2 --reset     # Reset and run Worker 2 categories
+ *   npx tsx scripts/full-scrape.ts --category stanovi     # Scrape one category only
+ *   npx tsx scripts/full-scrape.ts --max-pages 50         # Cap pages per category
  */
 
 import {
@@ -38,6 +40,7 @@ function parseArgs(): {
   skipKnown: number;
   sortOld: boolean;
   site: "njuskalo" | "oglasnik";
+  workerId: number | null;
 } {
   const args = process.argv.slice(2);
   let reset = false;
@@ -47,6 +50,8 @@ function parseArgs(): {
   let skipKnown = 0; // 0 = disabled; N = skip to next county/category after N consecutive all-known pages
   let sortOld = false;
   let site: "njuskalo" | "oglasnik" = "njuskalo";
+  let workerId: number | null = null;
+  let customCounties: string[] | null = null;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--reset") {
@@ -70,10 +75,16 @@ function parseArgs(): {
         site = s;
       }
       i++;
+    } else if (args[i] === "--worker" && args[i + 1]) {
+      workerId = parseInt(args[i + 1], 10) || null;
+      i++;
+    } else if (args[i] === "--counties" && args[i + 1]) {
+      customCounties = args[i + 1].split(",").map((s) => s.trim());
+      i++;
     }
   }
 
-  return { reset, category, maxPages, splitCounties, skipKnown, sortOld, site };
+  return { reset, category, maxPages, splitCounties, skipKnown, sortOld, site, workerId, customCounties };
 }
 
 // ---------------------------------------------------------------------------
@@ -89,15 +100,16 @@ interface Progress {
   lastUpdated: string;
 }
 
-function getProgressFile(sortOld: boolean, site: string): string {
+function getProgressFile(sortOld: boolean, site: string, workerId?: number | null): string {
+  const suffix = workerId ? `-worker${workerId}` : "";
   if (site === "oglasnik") {
-    return path.resolve(__dirname, sortOld ? "full-scrape-oglasnik-old.json" : "full-scrape-oglasnik.json");
+    return path.resolve(__dirname, sortOld ? `full-scrape-oglasnik-old${suffix}.json` : `full-scrape-oglasnik${suffix}.json`);
   }
-  return path.resolve(__dirname, sortOld ? "full-scrape-progress-old.json" : "full-scrape-progress.json");
+  return path.resolve(__dirname, sortOld ? `full-scrape-progress-old${suffix}.json` : `full-scrape-progress${suffix}.json`);
 }
 
-function loadProgress(sortOld: boolean, site: string): Progress {
-  const file = getProgressFile(sortOld, site);
+function loadProgress(sortOld: boolean, site: string, workerId?: number | null): Progress {
+  const file = getProgressFile(sortOld, site, workerId);
   if (fs.existsSync(file)) {
     try {
       const raw = fs.readFileSync(file, "utf-8");
@@ -120,9 +132,9 @@ function loadProgress(sortOld: boolean, site: string): Progress {
   };
 }
 
-function saveProgress(progress: Progress, sortOld: boolean, site: string) {
+function saveProgress(progress: Progress, sortOld: boolean, site: string, workerId?: number | null) {
   progress.lastUpdated = new Date().toISOString();
-  fs.writeFileSync(getProgressFile(sortOld, site), JSON.stringify(progress, null, 2), "utf-8");
+  fs.writeFileSync(getProgressFile(sortOld, site, workerId), JSON.stringify(progress, null, 2), "utf-8");
 }
 
 // ---------------------------------------------------------------------------
@@ -172,11 +184,8 @@ const USER_AGENTS = [
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
 ];
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
 async function runFullScrape() {
-  const { reset, category: singleCategory, maxPages, splitCounties, skipKnown, sortOld, site } = parseArgs();
+  const { reset, category: singleCategory, maxPages, splitCounties, skipKnown, sortOld, site, workerId, customCounties } = parseArgs();
   
   // Use correct config based on site
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -189,7 +198,7 @@ async function runFullScrape() {
   
   const allCategoryKeys = Object.keys(currentCategories);
 
-  const COUNTIES = [
+  const DEFAULT_COUNTIES = [
     "zagreb", "zagrebacka", "splitsko-dalmatinska", "primorsko-goranska",
     "istarska", "zadarska", "sibensko-kninska", "dubrovacko-neretvanska",
     "osjecko-baranjska", "varazdinska", "bjelovarsko-bilogorska", "brodsko-posavska",
@@ -197,6 +206,7 @@ async function runFullScrape() {
     "medimurska", "pozesko-slavonska", "sisacko-moslavacka", "viroviticko-podravska",
     "vukovarsko-srijemska"
   ];
+  const COUNTIES = customCounties || DEFAULT_COUNTIES;
 
   // Determine which categories to scrape
   let categoryKeys: string[];
@@ -207,6 +217,10 @@ async function runFullScrape() {
       process.exit(1);
     }
     categoryKeys = [singleCategory];
+  } else if (workerId && njuskaloConfig.WORKER_CATEGORIES[workerId] && site === "njuskalo") {
+    // Use pre-defined worker category subset
+    categoryKeys = njuskaloConfig.WORKER_CATEGORIES[workerId] as string[];
+    console.log(`[FullScrape] Worker ${workerId} categories: ${categoryKeys.join(", ")}`);
   } else {
     categoryKeys = allCategoryKeys;
   }
@@ -220,7 +234,7 @@ async function runFullScrape() {
     totalInserted: 0,
     totalSkipped: 0,
     lastUpdated: new Date().toISOString(),
-  } : loadProgress(sortOld, site);
+  } : loadProgress(sortOld, site, workerId);
 
   if (!reset && (progress.completedCategories.length > 0 || progress.currentPage > 1)) {
     console.log(`[FullScrape] Resuming from category index ${progress.currentCategoryIndex}, page ${progress.currentPage}`);
@@ -308,7 +322,7 @@ async function runFullScrape() {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`\n[FullScrape] Shutting down: ${reason}`);
-    saveProgress(progress, sortOld, site);
+    saveProgress(progress, sortOld, site, workerId);
     console.log(`[FullScrape] Progress saved. Total inserted so far: ${progress.totalInserted}`);
     try { await context.close(); } catch { /* ignore */ }
     try { await browser.close(); } catch { /* ignore */ }
@@ -337,9 +351,9 @@ async function runFullScrape() {
 
     progress.currentCategoryIndex = catIdx;
 
-    console.log(`\n${"═".repeat(60)}`);
+    console.log(`\n${"â•".repeat(60)}`);
     console.log(`[FullScrape] Category ${catIdx + 1}/${categoryKeys.length}: ${category} (${categoryPath})`);
-    console.log(`${"═".repeat(60)}`);
+    console.log(`${"â•".repeat(60)}`);
 
     const countiesToScrape = splitCounties ? COUNTIES : [""];
     const startCountyIdx = catIdx === progress.currentCategoryIndex ? progress.currentCountyIndex : 0;
@@ -354,7 +368,7 @@ async function runFullScrape() {
         console.log(`\n[FullScrape] -> Scanning county: ${county || "ALL COUNTIES (Base)"}`);
       }
 
-      // Determine start page (for resume) — must check BEFORE updating progress.currentCountyIndex
+      // Determine start page (for resume) â€” must check BEFORE updating progress.currentCountyIndex
       const isResumedCounty = (catIdx === progress.currentCategoryIndex && countyIdx === progress.currentCountyIndex);
       const startPage = isResumedCounty ? progress.currentPage : 1;
 
@@ -396,10 +410,10 @@ async function runFullScrape() {
           const title = await page.title();
           if (title.includes("ShieldSquare") || title.includes("Captcha")) {
             consecutiveBlocks++;
-            console.error(`[FullScrape] ⚠️  Bot protection detected! (${consecutiveBlocks}/${MAX_CONSECUTIVE_BLOCKS})`);
+            console.error(`[FullScrape] âš ï¸  Bot protection detected! (${consecutiveBlocks}/${MAX_CONSECUTIVE_BLOCKS})`);
 
             if (consecutiveBlocks >= MAX_CONSECUTIVE_BLOCKS) {
-              console.error("[FullScrape] 🛑 Too many consecutive blocks. Saving progress and exiting.");
+              console.error("[FullScrape] ðŸ›‘ Too many consecutive blocks. Saving progress and exiting.");
               progress.currentPage = pageNum;
               await shutdown("too many blocks");
               return;
@@ -422,16 +436,16 @@ async function runFullScrape() {
                 timeout: 20000,
               });
             } catch {
-              // No cards — end of category
+              // No cards â€” end of category
               emptyPages++;
               console.log(`[FullScrape] [${category}] No cards on page ${pageNum} (empty page ${emptyPages}/2).`);
               if (emptyPages >= 2) {
-                console.log(`[FullScrape] [${category}] 2 consecutive empty pages — category done.`);
+                console.log(`[FullScrape] [${category}] 2 consecutive empty pages â€” category done.`);
                 break;
               }
               // Save progress and continue to next page
               progress.currentPage = pageNum + 1;
-              saveProgress(progress, sortOld, site);
+              saveProgress(progress, sortOld, site, workerId);
               await njuskaloConfig.randomDelay(8000, 15000);
               continue;
             }
@@ -448,7 +462,7 @@ async function runFullScrape() {
                 break;
               }
               progress.currentPage = pageNum + 1;
-              saveProgress(progress, sortOld, site);
+              saveProgress(progress, sortOld, site, workerId);
               await njuskaloConfig.randomDelay(3000, 5000);
               continue;
             }
@@ -481,69 +495,45 @@ async function runFullScrape() {
             emptyPages++;
             console.log(`[FullScrape] [${category}] 0 listings parsed on page ${pageNum} (empty ${emptyPages}/2).`);
             if (emptyPages >= 2) {
-              console.log(`[FullScrape] [${category}] 2 consecutive empty pages — category done.`);
+              console.log(`[FullScrape] [${category}] 2 consecutive empty pages â€” category done.`);
               break;
             }
             progress.currentPage = pageNum + 1;
-            saveProgress(progress, sortOld, site);
+            saveProgress(progress, sortOld, site, workerId);
             await njuskaloConfig.randomDelay(8000, 15000);
             continue;
           }
 
           console.log(`[FullScrape] [${category}] Parsed ${pageListings.length} listings on page ${pageNum}.`);
 
-          // Deduplicate against known IDs
-          const newListings = pageListings.filter((l) => !knownIds.has(l.external_id));
-          const skipped = pageListings.length - newListings.length;
-
-          if (skipped > 0) {
-            console.log(`[FullScrape] [${category}]   Skipped ${skipped} already-known listings.`);
-          }
-
-          // Batch upsert new listings
-          if (newListings.length > 0) {
+          // Upsert all parsed listings (this updates existing records with newly scraped fields like room_count, yard_size_m2, etc.)
+          if (pageListings.length > 0) {
             const BATCH_SIZE = 50;
             let batchInserted = 0;
 
-            for (let i = 0; i < newListings.length; i += BATCH_SIZE) {
-              const batch = newListings.slice(i, i + BATCH_SIZE);
+            for (let i = 0; i < pageListings.length; i += BATCH_SIZE) {
+              const batch = pageListings.slice(i, i + BATCH_SIZE);
               const { error: insertError } = await (supabase as any)
                 .from("listings")
-                .upsert(batch, { onConflict: "external_id", ignoreDuplicates: true });
+                .upsert(batch, { onConflict: "external_id" });
 
               if (insertError) {
-                console.error(`[FullScrape] [${category}] Batch insert error:`, insertError.message);
+                console.error(`[FullScrape] [${category}] Batch upsert error:`, insertError.message);
               } else {
                 batchInserted += batch.length;
-                // Mark as known so we don't re-insert on next page
-                batch.forEach((l: any) => knownIds.add(l.external_id));
               }
             }
 
-            const privateCount = newListings.filter((l) => l.advertiser_type === "Privatni").length;
-            const agencyCount = newListings.length - privateCount;
-            console.log(`[FullScrape] [${category}]   ✅ Saved ${batchInserted} listings (${privateCount} private, ${agencyCount} agency).`);
+            const privateCount = pageListings.filter((l) => l.advertiser_type === "Privatni").length;
+            const agencyCount = pageListings.length - privateCount;
+            console.log(`[FullScrape] [${category}]   ✅ Processed & Updated ${batchInserted} listings (${privateCount} private, ${agencyCount} agency).`);
 
             progress.totalInserted += batchInserted;
-          } else {
-            console.log(`[FullScrape] [${category}]   All listings already known.`);
-            consecutiveAllKnown++;
-            if (skipKnown > 0 && consecutiveAllKnown >= skipKnown) {
-              console.log(`[FullScrape] [${category}${countyPath}] ${skipKnown} consecutive all-known pages — skipping to next section.`);
-              break;
-            }
           }
-
-          // Reset all-known counter when we find new listings
-          if (newListings.length > 0) {
-            consecutiveAllKnown = 0;
-          }
-
-          progress.totalSkipped += skipped;
 
           // Save progress after each page
           progress.currentPage = pageNum + 1;
-          saveProgress(progress, sortOld, site);
+          saveProgress(progress, sortOld, site, workerId);
 
           // Delay between pages (8-15 seconds)
           const delay = 8000 + Math.floor(Math.random() * 7000);
@@ -569,9 +559,9 @@ async function runFullScrape() {
       progress.currentCountyIndex = 0;
       progress.currentPage = 1;
       progress.currentCategoryIndex = catIdx + 1;
-      saveProgress(progress, sortOld, site);
+      saveProgress(progress, sortOld, site, workerId);
 
-      console.log(`[FullScrape] ✅ Category "${category}" complete.`);
+      console.log(`[FullScrape] âœ… Category "${category}" complete.`);
       console.log(`[FullScrape] Running total: ${progress.totalInserted} inserted, ${progress.totalSkipped} skipped.`);
 
       // Longer delay between categories (30-60 seconds)
@@ -584,12 +574,12 @@ async function runFullScrape() {
   }
 
   // Final summary
-  console.log(`\n${"═".repeat(60)}`);
-  console.log("[FullScrape] 🏁 FULL SCRAPE COMPLETE!");
+  console.log(`\n${"â•".repeat(60)}`);
+  console.log("[FullScrape] ðŸ FULL SCRAPE COMPLETE!");
   console.log(`[FullScrape]   Total inserted: ${progress.totalInserted}`);
   console.log(`[FullScrape]   Total skipped (already known): ${progress.totalSkipped}`);
   console.log(`[FullScrape]   Categories completed: ${progress.completedCategories.length}/${categoryKeys.length}`);
-  console.log(`${"═".repeat(60)}\n`);
+  console.log(`${"â•".repeat(60)}\n`);
 
   await context.close();
   await browser.close();

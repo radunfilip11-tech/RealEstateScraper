@@ -53,6 +53,13 @@ export async function POST(request: Request) {
       price_max: body.price_max ?? null,
       size_min: body.size_min ?? null,
       size_max: body.size_max ?? null,
+      room_count_min: body.room_count_min ?? null,
+      room_count_max: body.room_count_max ?? null,
+      land_types: body.land_types ?? [],
+      house_types: body.house_types ?? [],
+      commercial_types: body.commercial_types ?? [],
+      yard_size_min: body.yard_size_min ?? null,
+      yard_size_max: body.yard_size_max ?? null,
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

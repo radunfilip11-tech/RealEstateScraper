@@ -8,6 +8,9 @@ import {
   SOURCES,
   TRANSACTION_TYPES,
   LISTING_STATUSES,
+  LAND_TYPES,
+  HOUSE_TYPES,
+  COMMERCIAL_TYPES,
   type NotificationFilter,
 } from "@/lib/supabase/types";
 import FilterDropdown from "@/components/ui/FilterDropdown";
@@ -63,6 +66,28 @@ export default function NotificationFilterForm({
   );
   const [sizeMax, setSizeMax] = useState<number | null>(
     existing?.size_max ?? null,
+  );
+
+  const [roomCountMin, setRoomCountMin] = useState<number | null>(
+    existing?.room_count_min ?? null,
+  );
+  const [roomCountMax, setRoomCountMax] = useState<number | null>(
+    existing?.room_count_max ?? null,
+  );
+  const [landTypes, setLandTypes] = useState<string[]>(
+    existing?.land_types ?? [],
+  );
+  const [houseTypes, setHouseTypes] = useState<string[]>(
+    existing?.house_types ?? [],
+  );
+  const [commercialTypes, setCommercialTypes] = useState<string[]>(
+    existing?.commercial_types ?? [],
+  );
+  const [yardSizeMin, setYardSizeMin] = useState<number | null>(
+    existing?.yard_size_min ?? null,
+  );
+  const [yardSizeMax, setYardSizeMax] = useState<number | null>(
+    existing?.yard_size_max ?? null,
   );
 
   // Fetch all unique locations for the LocationFilterDropdown
@@ -130,6 +155,13 @@ export default function NotificationFilterForm({
       price_max: priceMax,
       size_min: sizeMin,
       size_max: sizeMax,
+      room_count_min: roomCountMin,
+      room_count_max: roomCountMax,
+      land_types: landTypes,
+      house_types: houseTypes,
+      commercial_types: commercialTypes,
+      yard_size_min: yardSizeMin,
+      yard_size_max: yardSizeMax,
     };
 
     try {
@@ -320,6 +352,64 @@ export default function NotificationFilterForm({
                 onMinChange={setSizeMin}
                 onMaxChange={setSizeMax}
               />
+
+              {/* Rooms: show when Stan, Kuća, Vikendica, Luksuzni stan, Luksuzna kuća, Novogradnja selected */}
+              {(propertyTypes.length === 0 ||
+                propertyTypes.some(t => ["Stan", "Kuća", "Vikendica", "Luksuzni stan", "Luksuzna kuća", "Novogradnja"].includes(t))) && (
+                <RangeFilter
+                  id="notif-rooms"
+                  label="Sobe"
+                  unit="sob."
+                  min={roomCountMin}
+                  max={roomCountMax}
+                  onMinChange={setRoomCountMin}
+                  onMaxChange={setRoomCountMax}
+                />
+              )}
+
+              {/* Land type: show when Zemljište selected */}
+              {(propertyTypes.length === 0 ||
+                propertyTypes.includes("Zemljište")) && (
+                <FilterDropdown
+                  label="Tip zemljišta"
+                  options={[...LAND_TYPES]}
+                  selected={landTypes}
+                  onChange={setLandTypes}
+                />
+              )}
+
+              {/* House type: show when Kuća, Vikendica, or Luksuzna kuća selected */}
+              {(propertyTypes.some(t => ["Kuća", "Vikendica", "Luksuzna kuća"].includes(t))) && (
+                <FilterDropdown
+                  label="Tip kuće"
+                  options={[...HOUSE_TYPES]}
+                  selected={houseTypes}
+                  onChange={setHouseTypes}
+                />
+              )}
+
+              {/* Yard size: show when Kuća, Vikendica, or Luksuzna kuća selected */}
+              {(propertyTypes.some(t => ["Kuća", "Vikendica", "Luksuzna kuća"].includes(t))) && (
+                <RangeFilter
+                  id="notif-yard-size"
+                  label="Okućnica (m²)"
+                  unit="m²"
+                  min={yardSizeMin}
+                  max={yardSizeMax}
+                  onMinChange={setYardSizeMin}
+                  onMaxChange={setYardSizeMax}
+                />
+              )}
+
+              {/* Commercial type: show when Poslovni prostor selected */}
+              {(propertyTypes.some(t => t === "Poslovni prostor")) && (
+                <FilterDropdown
+                  label="Namjena prostora"
+                  options={[...COMMERCIAL_TYPES]}
+                  selected={commercialTypes}
+                  onChange={setCommercialTypes}
+                />
+              )}
             </div>
           </div>
 

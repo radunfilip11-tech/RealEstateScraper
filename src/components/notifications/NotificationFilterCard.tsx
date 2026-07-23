@@ -27,6 +27,10 @@ function buildBadges(filter: NotificationFilter): Badge[] {
   push(filter.sources, "bg-gray-100 text-gray-700");
   push(filter.statuses, "bg-amber-100 text-amber-800");
 
+  push(filter.land_types, "bg-emerald-50 text-emerald-700");
+  push(filter.house_types, "bg-amber-50 text-amber-700");
+  push(filter.commercial_types, "bg-blue-50 text-blue-700");
+
   if (filter.price_min !== null || filter.price_max !== null) {
     badges.push({
       label: `${filter.price_min?.toLocaleString("hr-HR") ?? "0"} - ${filter.price_max?.toLocaleString("hr-HR") ?? "∞"} €`,
@@ -37,6 +41,18 @@ function buildBadges(filter: NotificationFilter): Badge[] {
     badges.push({
       label: `${filter.size_min ?? "0"} - ${filter.size_max ?? "∞"} m²`,
       color: "bg-orange-100 text-orange-800",
+    });
+  }
+  if (filter.yard_size_min !== null || filter.yard_size_max !== null) {
+    badges.push({
+      label: `Okućnica: ${filter.yard_size_min ?? "0"} - ${filter.yard_size_max ?? "∞"} m²`,
+      color: "bg-orange-50 text-orange-800",
+    });
+  }
+  if (filter.room_count_min !== null || filter.room_count_max !== null) {
+    badges.push({
+      label: `Sobe: ${filter.room_count_min ?? "0"} - ${filter.room_count_max ?? "∞"}`,
+      color: "bg-gray-100 text-gray-800",
     });
   }
 

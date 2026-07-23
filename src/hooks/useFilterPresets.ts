@@ -26,6 +26,14 @@ export const DEFAULT_FILTERS: FilterState = {
   dateFrom: '',
   dateTo: '',
   dateField: 'published_at',
+  // Category-specific
+  roomCountMin: null,
+  roomCountMax: null,
+  selectedLandTypes: [],
+  selectedHouseTypes: [],
+  selectedCommercialTypes: [],
+  yardSizeMin: null,
+  yardSizeMax: null,
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
