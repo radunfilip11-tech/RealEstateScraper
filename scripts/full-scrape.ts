@@ -41,6 +41,7 @@ function parseArgs(): {
   sortOld: boolean;
   site: "njuskalo" | "oglasnik";
   workerId: number | null;
+  customCounties: string[] | null;
 } {
   const args = process.argv.slice(2);
   let reset = false;
