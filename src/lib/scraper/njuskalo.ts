@@ -959,6 +959,8 @@ export async function scrapeSearchPagesUntilKnown(
 
   const allNewListings: ListingInsert[] = [];
   let pagesScanned = 0;
+  let consecutiveKnownPages = 0;
+  const KNOWN_PAGES_STOP_THRESHOLD = 3; // require 3 all-known pages before stopping
 
   for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
     const url =
@@ -1030,10 +1032,17 @@ export async function scrapeSearchPagesUntilKnown(
 
       allNewListings.push(...newListingsOnPage);
 
-      // STOP CONDITION: if ALL listings on this page are already known in DB, we've caught up!
+      // STOP CONDITION: require 3 consecutive all-known pages before stopping.
+      // This prevents early termination when promoted/sticky ads fill page 1.
       if (newListingsOnPage.length === 0) {
-        console.log(`[Monitor] [${category}] Page ${pageNum}: all ${listings.length} listings known. Incremental catchup complete!`);
-        break;
+        consecutiveKnownPages++;
+        console.log(`[Monitor] [${category}] Page ${pageNum}: all ${listings.length} listings known (${consecutiveKnownPages}/${KNOWN_PAGES_STOP_THRESHOLD} consecutive). ${consecutiveKnownPages >= KNOWN_PAGES_STOP_THRESHOLD ? 'Stopping.' : 'Continuing...'} `);
+        if (consecutiveKnownPages >= KNOWN_PAGES_STOP_THRESHOLD) {
+          break;
+        }
+      } else {
+        // Reset counter whenever we find new listings
+        consecutiveKnownPages = 0;
       }
 
       // Delay between pages if paginating further
