@@ -1127,6 +1127,7 @@ export async function fetchDetailPagePlaywright(
         locationCity: null,
         locationNeighborhood: null,
         sizeM2: null,
+        landType: null,
         advertiserType: null,
         isPromoted: false,
         publishedAt: null,

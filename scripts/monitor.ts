@@ -640,7 +640,7 @@ async function runMonitor() {
                 listing.size_m2 = detail.sizeM2;
               }
             } catch (err: any) {
-              await dbLog(`[${category}] Failed detail fetch for ${listing.external_id}: ${err.message}`, "warn");
+              await dbLog(`[${category}] Failed detail fetch for ${listing.external_id}: ${err.message}`, "warning");
             }
           }
 
